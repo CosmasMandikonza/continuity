@@ -1,0 +1,217 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-hanken-grotesk), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-space-grotesk), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-heading: var(--font-space-grotesk), system-ui, sans-serif;
+
+  /* ---- instrument chassis (warm aluminium / bone) ---- */
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-sink: var(--sink);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-2s: var(--ink-2s);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+  --color-rule-strong: var(--rule-strong);
+
+  /* ---- signature ---- */
+  --color-flux: var(--flux);
+  --color-flux-2: var(--flux-2);
+  --color-flux-ink: var(--flux-ink);
+
+  /* ---- the screen (only dark surface) ---- */
+  --color-screen: var(--screen);
+  --color-screen-2: var(--screen-2);
+  --color-screen-edge: var(--screen-edge);
+  --color-phos: var(--phos);
+  --color-comp: var(--comp);
+  --color-probe: var(--probe);
+  --color-caution: var(--caution);
+
+  /* shadcn tokens */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  /* instrument chassis */
+  --paper: #e7e1d3;
+  --paper-2: #f1ecdf;
+  --paper-3: #efe9db;
+  --sink: #dbd4c3;
+  --ink: #1c1a16;
+  --ink-2: #55504733;
+  --ink-2s: #565047;
+  --ink-3: #8c867a;
+  --rule: #cdc4b1;
+  --rule-2: #bcb29c;
+  --rule-strong: #a89d84;
+
+  /* signature flux orange */
+  --flux: #e2540a;
+  --flux-2: #f06a1f;
+  --flux-ink: #7a2c05;
+
+  /* the screen */
+  --screen: #0b0e0c;
+  --screen-2: #0f130f;
+  --screen-edge: #05201a;
+  --phos: #39f0a3;
+  --comp: #86d9ff;
+  --probe: #ff5247;
+  --caution: #ffc24d;
+
+  /* shadcn mapping onto the instrument palette */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-2);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-2);
+  --popover-foreground: var(--ink);
+  --primary: var(--flux);
+  --primary-foreground: #fff7e9;
+  --secondary: var(--paper-3);
+  --secondary-foreground: var(--ink-2s);
+  --muted: var(--sink);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--paper-3);
+  --accent-foreground: var(--ink);
+  --destructive: var(--probe);
+  --border: var(--rule-2);
+  --input: var(--rule-2);
+  --ring: var(--flux);
+  --radius: 0.7rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply text-foreground;
+    font-size: 13.5px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background: radial-gradient(
+      120% 90% at 50% -10%,
+      #cfc7b4 0%,
+      #bcb39e 60%,
+      #a99e86 100%
+    );
+  }
+  html.bg-chassis {
+    background: radial-gradient(
+      120% 90% at 50% -10%,
+      #cfc7b4 0%,
+      #bcb39e 60%,
+      #a99e86 100%
+    );
+  }
+}
+
+@layer utilities {
+  .ucl {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    font-weight: 600;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-blink {
+  animation: blink 1.2s steps(2) infinite;
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.2s infinite;
+}
+
+/* SVG board element states (driven by React state classes) */
+.comp .bdy {
+  transition: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.comp .rd {
+  font-family: var(--font-mono);
+  fill: #4d7a6a;
+  letter-spacing: 0.04em;
+  transition: 0.25s;
+}
+.comp.lit .bdy {
+  stroke: var(--comp);
+  stroke-width: 1.5;
+  filter: url(#gC);
+}
+.comp.lit .rd {
+  fill: var(--comp);
+}
+.comp.fault .bdy {
+  stroke: var(--probe);
+  stroke-width: 1.8;
+  filter: url(#gR);
+}
+.comp.fault .rd {
+  fill: var(--probe);
+}
+
+.trace-path {
+  fill: none;
+  stroke: var(--phos);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: url(#phos);
+}
+
+.log-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+.log-scroll::-webkit-scrollbar-thumb {
+  background: var(--rule-2);
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
