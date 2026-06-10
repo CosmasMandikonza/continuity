@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import type { ROWS, Segment } from '@/lib/wrenchboard-data'
+import type { ROWS, Segment } from '@/lib/continuity-data'
 
 interface ChipRowProps {
   segments: Segment[]

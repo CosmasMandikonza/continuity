@@ -1,4 +1,4 @@
-// Typed mock data for the WrenchBoard diagnostic instrument.
+// Typed mock data for the Continuity diagnostic instrument.
 // ROWS = provenance map (database rows), STEPS = scripted diagnostic sequence.
 
 export type RowKind = 'comp' | 'net'

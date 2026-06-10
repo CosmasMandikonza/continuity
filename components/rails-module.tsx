@@ -1,4 +1,4 @@
-import { RAILS } from '@/lib/wrenchboard-data'
+import { RAILS } from '@/lib/continuity-data'
 
 const pinClass: Record<string, string> = {
   ok: 'bg-phos shadow-[0_0_8px_#39f0a3]',

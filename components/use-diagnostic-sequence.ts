@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { STEPS, type Step } from '@/lib/wrenchboard-data'
+import { STEPS, type Step } from '@/lib/continuity-data'
 
 export interface InstrumentState {
   entries: Step[]

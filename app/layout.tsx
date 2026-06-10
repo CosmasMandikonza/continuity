@@ -22,7 +22,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'WrenchBoard — Bench Diagnostic Instrument',
+  title: 'Continuity — Bench Diagnostic Instrument',
   description:
     'A bench diagnostic instrument that traces board faults to a single refdes, with every citation verified against the electrical graph.',
   generator: 'v0.app',

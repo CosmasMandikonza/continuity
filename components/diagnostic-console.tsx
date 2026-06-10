@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PenLine, Camera, ArrowRight, RotateCcw } from 'lucide-react'
-import type { ROWS, Step } from '@/lib/wrenchboard-data'
+import type { ROWS, Step } from '@/lib/continuity-data'
 import { ChipRow } from './chip-row'
 
 interface DiagnosticConsoleProps {
@@ -160,7 +160,7 @@ function FixCard({
   onOpen,
   onClose,
 }: {
-  steps: import('@/lib/wrenchboard-data').Segment[][]
+  steps: import('@/lib/continuity-data').Segment[][]
   onOpen: (key: keyof typeof ROWS, rect: DOMRect) => void
   onClose: () => void
 }) {

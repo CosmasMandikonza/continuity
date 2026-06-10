@@ -24,7 +24,7 @@ export function Faceplate({ faultLed }: FaceplateProps) {
         </svg>
         <div>
           <div className="font-display text-[16px] font-bold leading-none tracking-[-0.01em]">
-            WRENCH<span className="text-flux">BOARD</span>
+            CONTI<span className="text-flux">NUITY</span>
           </div>
           <div className="mt-[3px] font-mono text-[8.5px] tracking-[0.18em] text-ink-3">
             BENCH&nbsp;DIAGNOSTIC&nbsp;INSTRUMENT

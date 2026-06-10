@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ROWS } from '@/lib/wrenchboard-data'
+import { ROWS } from '@/lib/continuity-data'
 
 interface ProvState {
   key: keyof typeof ROWS
