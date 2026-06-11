@@ -1,16 +1,20 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { PenLine, Camera, ArrowRight, RotateCcw } from 'lucide-react'
+import { PenLine, Camera, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert } from 'lucide-react'
 import type { ROWS, Step } from '@/lib/continuity-data'
+import type { VerificationView } from './use-diagnostic-sequence'
 import { ChipRow } from './chip-row'
 
 interface DiagnosticConsoleProps {
   entries: Step[]
   thinking: boolean
   busy: boolean
+  notice: { kind: 'quota' | 'throttle' | 'error'; text: string } | null
+  verification: VerificationView | null
   onReplay: () => void
+  onSubmit: (symptom: string) => void
   onOpen: (key: keyof typeof ROWS, rect: DOMRect) => void
   onClose: () => void
 }
@@ -27,15 +31,26 @@ export function DiagnosticConsole({
   entries,
   thinking,
   busy,
+  notice,
+  verification,
   onReplay,
+  onSubmit,
   onOpen,
   onClose,
 }: DiagnosticConsoleProps) {
   const logRef = useRef<HTMLDivElement>(null)
+  const [draft, setDraft] = useState('')
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [entries, thinking])
+
+  const submit = () => {
+    const symptom = draft.trim()
+    if (!symptom || busy) return
+    onSubmit(symptom)
+    setDraft('')
+  }
 
   return (
     <section
@@ -92,6 +107,17 @@ export function DiagnosticConsole({
             </motion.div>
           ))}
 
+          {verification && (
+            <motion.div
+              key="verification"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.34, ease: 'easeOut' }}
+            >
+              <VerificationStamp v={verification} />
+            </motion.div>
+          )}
+
           {thinking && (
             <motion.div
               key="thinking"
@@ -115,6 +141,18 @@ export function DiagnosticConsole({
 
       {/* composer */}
       <div className="border-t border-rule p-[11px]">
+        {notice && (
+          <div
+            className={`mb-[9px] rounded-[8px] border px-[11px] py-[8px] font-mono text-[10px] leading-[1.5] ${
+              notice.kind === 'quota'
+                ? 'border-[#e9cf94] bg-[#fbf2dc] text-[#9a6a00]'
+                : 'border-[#e6a273] bg-[#fbe7da] text-flux'
+            }`}
+            role="status"
+          >
+            {notice.text}
+          </div>
+        )}
         <div className="flex items-center gap-[9px] rounded-[9px] border border-rule-2 bg-[#fff7e9] px-[11px] py-[9px] focus-within:border-flux focus-within:shadow-[0_0_0_3px_#e2540a22]">
           <button
             type="button"
@@ -125,13 +163,24 @@ export function DiagnosticConsole({
             <Camera size={17} strokeWidth={1.6} />
           </button>
           <input
-            placeholder="Ask about a refdes, net, or measurement…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submit()
+              }
+            }}
+            disabled={busy}
+            placeholder="Describe a symptom to diagnose live…"
             aria-label="Message"
-            className="flex-1 border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
+            className="flex-1 border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3 disabled:opacity-60"
           />
           <button
             type="button"
-            className="grid h-[30px] w-[30px] place-items-center rounded-[7px] bg-flux text-primary-foreground transition-colors hover:bg-flux-2"
+            onClick={submit}
+            disabled={busy || !draft.trim()}
+            className="grid h-[30px] w-[30px] place-items-center rounded-[7px] bg-flux text-primary-foreground transition-colors hover:bg-flux-2 disabled:opacity-40"
             aria-label="Send"
           >
             <ArrowRight size={15} strokeWidth={2} />
@@ -152,6 +201,39 @@ export function DiagnosticConsole({
         </div>
       </div>
     </section>
+  )
+}
+
+function VerificationStamp({ v }: { v: VerificationView }) {
+  const ok = v.verified
+  return (
+    <div
+      className={`rounded-[9px] border px-3 py-[10px] ${
+        ok ? 'border-[#9fd9bf] bg-[#e9f7ef]' : 'border-[#e9cf94] bg-[#fbf2dc]'
+      }`}
+    >
+      <div
+        className={`flex items-center gap-[7px] font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${
+          ok ? 'text-[#1f7a52]' : 'text-[#9a6a00]'
+        }`}
+      >
+        {ok ? <ShieldCheck size={14} strokeWidth={2} /> : <ShieldAlert size={14} strokeWidth={2} />}
+        {ok ? 'verified \u2713 against electrical_graph' : '\u26a0 unverified — needs review'}
+        <span className="ml-auto font-mono text-[9px] font-normal text-ink-3">{v.refdes}</span>
+      </div>
+      {v.checks.length > 0 && (
+        <ul className="mt-[8px] flex flex-col gap-[4px]">
+          {v.checks.map((c, i) => (
+            <li key={i} className="flex items-center gap-[6px] font-mono text-[10px] text-ink-2s">
+              <span className={c.pass ? 'text-[#1f7a52]' : 'text-flux'}>
+                {c.pass ? '\u2713' : '\u2715'}
+              </span>
+              {c.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

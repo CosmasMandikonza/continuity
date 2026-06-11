@@ -12,7 +12,7 @@ import { MeasureGauge } from './measure-gauge'
 import { FooterStrip } from './footer-strip'
 
 export function Instrument() {
-  const { state, replay } = useDiagnosticSequence()
+  const { state, replay, runLive } = useDiagnosticSequence()
 
   // hovering a citation chip can transiently light its component on the screen.
   const handleLit = useCallback((_compId: string | null) => {
@@ -33,7 +33,7 @@ export function Instrument() {
       <Rivet className="bottom-[11px] left-[11px]" />
       <Rivet className="bottom-[11px] right-[11px]" />
 
-      <Faceplate faultLed={state.faultLed} />
+      <Faceplate faultLed={state.faultLed} meterUsage={state.meterUsage} />
 
       {/* deck (bento) */}
       <div className="grid min-h-0 gap-[14px] p-[14px] md:grid-cols-[160px_1fr_330px] lg:grid-cols-[172px_1fr_372px]">
@@ -53,7 +53,10 @@ export function Instrument() {
             entries={state.entries}
             thinking={state.thinking}
             busy={state.busy}
+            notice={state.notice}
+            verification={state.verification}
             onReplay={replay}
+            onSubmit={runLive}
             onOpen={open}
             onClose={close}
           />

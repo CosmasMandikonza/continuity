@@ -35,9 +35,34 @@ export async function getProvenance(refdes: string): Promise<ProvCardView | null
   const deviceId = await sharedDeviceId()
   if (!deviceId) return null
 
-  // Net chip: PP5V0 maps to the named net PP5V0_SYS.
-  if (refdes === 'PP5V0') {
-    const net = await netCard(deviceId, 'PP5V0_SYS')
+  // Net chip: 'PP5V0' is the demo alias for PP5V0_SYS; otherwise the live agent
+  // cites a net by its real name. Build a net card from the named net row.
+  const netName = refdes === 'PP5V0' ? 'PP5V0_SYS' : refdes
+  const looksLikeNet = refdes === 'PP5V0' || /_|^(GND|VBUS|PP|VBAT|VDD|VCC)/i.test(refdes)
+  if (looksLikeNet) {
+    const net = await netCard(deviceId, netName)
+    if (net) {
+      return {
+        kind: 'net',
+        rd: net.name,
+        src: 'electrical graph',
+        grid: [
+          ['class', net.netClass ? `${net.netClass} rail` : 'net'],
+          ['nominal', fmtVolts(net.nominalV)],
+          ['members', `${net.pinCount} pins`],
+          ['components', String(net.componentCount)],
+          ['on net', net.source ?? '—'],
+        ],
+        conf: '0.97',
+      }
+    }
+  }
+
+  // Component chips.
+  const card = await provenanceCard(deviceId, refdes)
+  if (!card) {
+    // Last resort: maybe it's a net that didn't match the heuristic above.
+    const net = await netCard(deviceId, refdes)
     if (!net) return null
     return {
       kind: 'net',
@@ -53,10 +78,6 @@ export async function getProvenance(refdes: string): Promise<ProvCardView | null
       conf: '0.97',
     }
   }
-
-  // Component chips.
-  const card = await provenanceCard(deviceId, refdes)
-  if (!card) return null
 
   const primaryNet = card.nets[0]
   const grid: [string, string][] = [
