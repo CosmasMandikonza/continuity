@@ -9,13 +9,17 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@aws-sdk/client-rds": "^3.1066.0",
+    "@aws-sdk/rds-signer": "^3.1066.0",
     "@base-ui/react": "^1.5.0",
     "@vercel/analytics": "1.6.1",
+    "@vercel/functions": "^3.7.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
+    "pg": "^8.21.0",
     "react": "^19",
     "react-dom": "^19",
     "shadcn": "^4.8.0",
