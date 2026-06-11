@@ -503,3 +503,19 @@ export async function meterTenant(
   )
   return { used: Number(inc[0].used), quota: Number(inc[0].quota), over: false }
 }
+
+// Read-only current usage for a tenant/period (no increment). Backs the
+// faceplate meter pill on first paint so it shows the signed-in shop's real
+// count. A shop with no diagnostics yet reads 0/500.
+export async function readTenantUsage(
+  client: PoolClient,
+  tenantId: string,
+  period: string,
+): Promise<{ used: number; quota: number }> {
+  const { rows } = await client.query(
+    'SELECT used, quota FROM tenant_usage WHERE tenant_id = $1 AND period = $2',
+    [tenantId, period],
+  )
+  if (!rows.length) return { used: 0, quota: 500 }
+  return { used: Number(rows[0].used), quota: Number(rows[0].quota) }
+}

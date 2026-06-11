@@ -1,6 +1,9 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata } from 'next'
 import { Space_Grotesk, IBM_Plex_Mono, Hanken_Grotesk } from 'next/font/google'
+import { ClerkProvider } from '@clerk/nextjs'
+import { isClerkEnabled } from '@/lib/clerk-config'
+import { clerkAppearance } from '@/lib/clerk-appearance'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({
@@ -33,7 +36,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  return (
+  const tree = (
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${hankenGrotesk.variable} ${ibmPlexMono.variable} bg-chassis`}
@@ -44,4 +47,10 @@ export default function RootLayout({
       </body>
     </html>
   )
+
+  // Only mount ClerkProvider when keys are present, so the no-auth scripted
+  // demo runs untouched with zero Clerk configuration.
+  if (!isClerkEnabled()) return tree
+
+  return <ClerkProvider appearance={clerkAppearance}>{tree}</ClerkProvider>
 }

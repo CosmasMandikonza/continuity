@@ -1,11 +1,14 @@
 'use client'
 
+import { AuthButton } from './auth-button'
+
 interface FaceplateProps {
   faultLed: boolean
   meterUsage?: { used: number; quota: number } | null
+  authEnabled?: boolean
 }
 
-export function Faceplate({ faultLed, meterUsage }: FaceplateProps) {
+export function Faceplate({ faultLed, meterUsage, authEnabled = false }: FaceplateProps) {
   const used = meterUsage?.used ?? 142
   const quota = meterUsage?.quota ?? 500
   return (
@@ -68,6 +71,7 @@ export function Faceplate({ faultLed, meterUsage }: FaceplateProps) {
       <div className="font-mono text-[10px] text-ink-3">
         DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">{used}</b>/{quota}
       </div>
+      {authEnabled && <AuthButton enabled={authEnabled} />}
     </header>
   )
 }

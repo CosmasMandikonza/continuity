@@ -8,8 +8,11 @@ import {
   netCard,
   deviceIdByName,
   fleetSummary,
+  readTenantUsage,
   type FleetSummary,
 } from '@/lib/queries'
+import { withTenant } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 
 const DEVICE_NAME = 'MNT Reform'
 
@@ -90,4 +93,12 @@ export async function getFailureRate(
   symptom = 'no power',
 ): Promise<FleetSummary | null> {
   return fleetSummary(deviceName, symptom)
+}
+
+// getMeterUsage -> the signed-in shop's real diagnostics count for the current
+// month, powering the faceplate meter pill. Read-only (no increment).
+export async function getMeterUsage(): Promise<{ used: number; quota: number }> {
+  const tenantId = await getTenantId()
+  const period = new Date().toISOString().slice(0, 7) // YYYY-MM
+  return withTenant(tenantId, (client) => readTenantUsage(client, tenantId, period))
 }

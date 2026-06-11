@@ -25,13 +25,11 @@ import {
 } from '@/lib/queries'
 import { verifyFinding } from '@/lib/verify'
 import { diagnosticModel, modelProviderOptions, HAS_MODEL_CREDS } from '@/lib/model'
+import { getTenantContext } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-// Seeded dev tenant/user (migration 010). Auth replaces these later.
-const DEV_TENANT_ID = 'a0000000-0000-0000-0000-0000000000d0'
-const DEV_USER_ID = 'b0000000-0000-0000-0000-0000000000d0'
 const DEVICE_NAME = 'MNT Reform'
 
 const SYSTEM_PROMPT = `You are Continuity, a meticulous board-level repair diagnostician working a live bench.
@@ -67,6 +65,9 @@ export async function POST(req: Request) {
     return Response.json({ fallback: true, reason: 'no-device' }, { status: 200 })
   }
 
+  // Resolve the signed-in shop (or the DEV fallback when Clerk is absent).
+  const { tenantId, userId } = await getTenantContext()
+
   const period = new Date().toISOString().slice(0, 7) // YYYY-MM
 
   // Collect citations as the agent inspects rows, so we can persist + verify them.
@@ -80,8 +81,8 @@ export async function POST(req: Request) {
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       // ---- a) RATE LIMIT (before any model call) --------------------------
-      const meter = await withTenant(DEV_TENANT_ID, async (client) =>
-        meterTenant(client, DEV_TENANT_ID, period),
+      const meter = await withTenant(tenantId, async (client) =>
+        meterTenant(client, tenantId, period),
       )
       if (meter.over) {
         writer.write({
@@ -99,13 +100,13 @@ export async function POST(req: Request) {
       })
 
       // ---- b) open a repair + save the tech message -----------------------
-      repairId = await withTenant(DEV_TENANT_ID, async (client) => {
+      repairId = await withTenant(tenantId, async (client) => {
         const ref = `R-${Date.now().toString(36).toUpperCase()}`
         const id = await createRepair(
           client,
-          DEV_TENANT_ID,
+          tenantId,
           deviceId,
-          DEV_USER_ID,
+          userId,
           ref,
           symptom,
         )
@@ -184,7 +185,7 @@ export async function POST(req: Request) {
             expected: z.number().nullable().default(null),
           }),
           execute: async ({ target, kind, value, unit, expected }) => {
-            const row = await withTenant(DEV_TENANT_ID, async (client) => {
+            const row = await withTenant(tenantId, async (client) => {
               // Decide whether the target is a net or a component.
               const netId = await resolveNetId(client, deviceId, target)
               const isNet = Boolean(netId)
@@ -216,7 +217,7 @@ export async function POST(req: Request) {
           }),
           execute: async ({ refdes, net, kind, confidence }) => {
             // Guard: refuse to propose a finding for an unknown part.
-            const findingId = await withTenant(DEV_TENANT_ID, async (client) => {
+            const findingId = await withTenant(tenantId, async (client) => {
               const compId = await resolveComponentId(client, deviceId, refdes)
               if (!compId) return ''
               return proposeFindingRow(client, deviceId, repairId, refdes, net, kind, confidence)
@@ -262,7 +263,7 @@ export async function POST(req: Request) {
       await result.finishReason.catch(() => undefined)
       if (pendingFinding) {
         const f = pendingFinding as { findingId: string; refdes: string; net: string | null; kind: string }
-        const verification = await withTenant(DEV_TENANT_ID, async (client) => {
+        const verification = await withTenant(tenantId, async (client) => {
           const v = await verifyFinding(
             client,
             deviceId,
@@ -285,7 +286,7 @@ export async function POST(req: Request) {
 
       // ---- e) persist the assistant transcript + citations ----------------
       const finalText = await result.text.catch(() => '')
-      await withTenant(DEV_TENANT_ID, async (client) => {
+      await withTenant(tenantId, async (client) => {
         const msgId = await saveMessage(client, repairId, 'agent', {
           text: finalText,
         })

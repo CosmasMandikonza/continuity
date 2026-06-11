@@ -11,7 +11,12 @@ import { DiagnosticConsole } from './diagnostic-console'
 import { MeasureGauge } from './measure-gauge'
 import { FooterStrip } from './footer-strip'
 
-export function Instrument() {
+interface InstrumentProps {
+  initialUsage?: { used: number; quota: number } | null
+  authEnabled?: boolean
+}
+
+export function Instrument({ initialUsage = null, authEnabled = false }: InstrumentProps) {
   const { state, replay, runLive } = useDiagnosticSequence()
 
   // hovering a citation chip can transiently light its component on the screen.
@@ -33,7 +38,11 @@ export function Instrument() {
       <Rivet className="bottom-[11px] left-[11px]" />
       <Rivet className="bottom-[11px] right-[11px]" />
 
-      <Faceplate faultLed={state.faultLed} meterUsage={state.meterUsage} />
+      <Faceplate
+        faultLed={state.faultLed}
+        meterUsage={state.meterUsage ?? initialUsage}
+        authEnabled={authEnabled}
+      />
 
       {/* deck (bento) */}
       <div className="grid min-h-0 gap-[14px] p-[14px] md:grid-cols-[160px_1fr_330px] lg:grid-cols-[172px_1fr_372px]">
