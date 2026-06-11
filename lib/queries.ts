@@ -140,6 +140,95 @@ export async function failureRate(deviceId: string, symptom: string): Promise<Fa
 }
 
 // ---------------------------------------------------------------------------
+// netCard — DERIVED card for a named net: its class/nominal plus live member
+// counts from the pins join. Mirrors provenanceCard but for a net chip.
+// ---------------------------------------------------------------------------
+export interface NetCard {
+  name: string
+  netClass: string | null
+  nominalV: number | null
+  pinCount: number
+  componentCount: number
+  source: string | null
+}
+
+export async function netCard(deviceId: string, netName: string): Promise<NetCard | null> {
+  const sql = `
+    SELECT n.name, n.net_class, n.nominal_v,
+           count(p.id)                         AS pin_count,
+           count(DISTINCT p.component_id)      AS component_count,
+           string_agg(DISTINCT c.refdes, ', ' ORDER BY c.refdes) AS members
+    FROM nets n
+    LEFT JOIN pins p ON p.net_id = n.id
+    LEFT JOIN components c ON c.id = p.component_id
+    WHERE n.device_id = $1 AND n.name = $2
+    GROUP BY n.id, n.name, n.net_class, n.nominal_v;
+  `
+  const { rows } = await query(sql, [deviceId, netName])
+  if (rows.length === 0) return null
+  const r = rows[0]
+  return {
+    name: r.name as string,
+    netClass: r.net_class as string | null,
+    nominalV: r.nominal_v != null ? Number(r.nominal_v) : null,
+    pinCount: Number(r.pin_count),
+    componentCount: Number(r.component_count),
+    source: r.members as string | null,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// deviceIdByName — resolve a shared reference device to its id by name.
+// ---------------------------------------------------------------------------
+export async function deviceIdByName(name: string): Promise<string | null> {
+  const { rows } = await query(
+    'SELECT id FROM devices WHERE name = $1 AND is_shared = true LIMIT 1',
+    [name],
+  )
+  return rows.length ? (rows[0].id as string) : null
+}
+
+// ---------------------------------------------------------------------------
+// fleetSummary — the "only-possible-with-a-database" readout. Combines the top
+// cross-shop root cause with the distinct shop count, both from SECURITY
+// DEFINER aggregates that never leak tenant rows.
+// ---------------------------------------------------------------------------
+export interface FleetSummary {
+  refdes: string
+  kind: string
+  pct: number
+  rootCauses: number
+  totalRepairs: number
+  shops: number
+  symptom: string
+}
+
+export async function fleetSummary(
+  deviceName: string,
+  symptom: string,
+): Promise<FleetSummary | null> {
+  const deviceId = await deviceIdByName(deviceName)
+  if (!deviceId) return null
+
+  const rates = await failureRate(deviceId, symptom)
+  if (rates.length === 0) return null
+  const top = rates[0]
+
+  const { rows } = await query('SELECT fleet_shops($1, $2) AS shops', [deviceId, symptom])
+  const shops = rows.length ? Number(rows[0].shops) : 0
+
+  return {
+    refdes: top.refdes,
+    kind: top.kind,
+    pct: top.pct,
+    rootCauses: top.rootCauses,
+    totalRepairs: top.totalRepairs,
+    shops,
+    symptom,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // provenanceCard — the card the UI shows, DERIVED by joining a component to its
 // pins/nets. Never read from a stored "cards" table.
 // ---------------------------------------------------------------------------
