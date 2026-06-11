@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg'
 import { query } from './db'
 
 // ---------------------------------------------------------------------------
@@ -269,4 +270,236 @@ export async function provenanceCard(
       role: n.role as string | null,
     })),
   }
+}
+
+// ===========================================================================
+// AGENT SURFACES — the only way the live diagnostic agent learns the board.
+// Reads resolve refdes/net to real rows; an unknown reference returns found:false
+// so the model can say "no such part" instead of inventing one.
+// ===========================================================================
+
+// Nets we never walk through on a generic hop: ground + high-fanout power rails
+// would make traceNet report "everything is connected".
+const RAIL_NETS = new Set(['GND', 'PGND', 'AGND'])
+
+export interface TraceResult {
+  found: boolean
+  start?: { refdes: string; kind: string }
+  onRail?: string | null
+  nodes: TraceNode[]
+}
+
+// traceNet — walk the electrical graph from a refdes, excluding GND/high-fanout
+// rails. If the start sits ON such a rail, return its regulator/source + the
+// immediate neighbours only (don't fan out across the whole rail).
+export async function traceNet(
+  deviceId: string,
+  startRefdes: string,
+  maxHops = 3,
+): Promise<TraceResult> {
+  const { rows: startRows } = await query(
+    'SELECT id, refdes, kind FROM components WHERE device_id = $1 AND refdes = $2',
+    [deviceId, startRefdes],
+  )
+  if (startRows.length === 0) return { found: false, nodes: [] }
+  const start = startRows[0]
+
+  // Is the start component itself sitting on a high-fanout rail?
+  const { rows: railRows } = await query(
+    `SELECT DISTINCT n.name, n.net_class,
+            (SELECT count(*) FROM pins p2 WHERE p2.net_id = n.id) AS fanout
+     FROM pins p JOIN nets n ON n.id = p.net_id
+     WHERE p.component_id = $1`,
+    [start.id],
+  )
+  const onRail =
+    railRows.find(
+      (r) => RAIL_NETS.has(r.name as string) || Number(r.fanout) > 24,
+    )?.name as string | undefined
+
+  const all = await netTrace(deviceId, startRefdes, maxHops)
+
+  // Drop neighbours reached purely via a GND/high-fanout rail edge.
+  const nodes = all.filter(
+    (n) => n.hop === 0 || !n.viaNet || !RAIL_NETS.has(n.viaNet),
+  )
+
+  // If start is on a rail, keep it tight: hop 0 + hop 1 only.
+  const scoped = onRail ? nodes.filter((n) => n.hop <= 1) : nodes
+
+  return {
+    found: true,
+    start: { refdes: start.refdes as string, kind: start.kind as string },
+    onRail: onRail ?? null,
+    nodes: scoped,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Repair-domain WRITES — every one runs inside withTenant(...) so RLS applies.
+// ---------------------------------------------------------------------------
+
+export async function createRepair(
+  client: PoolClient,
+  tenantId: string,
+  deviceId: string,
+  userId: string,
+  ref: string,
+  symptom: string,
+): Promise<string> {
+  const { rows } = await client.query(
+    `INSERT INTO repairs (tenant_id, device_id, user_id, ref, status, symptom)
+     VALUES ($1, $2, $3, $4, 'open', $5) RETURNING id`,
+    [tenantId, deviceId, userId, ref, symptom],
+  )
+  return rows[0].id as string
+}
+
+export async function saveMessage(
+  client: PoolClient,
+  repairId: string,
+  role: 'tech' | 'agent',
+  content: unknown,
+): Promise<string> {
+  const { rows } = await client.query(
+    `INSERT INTO messages (repair_id, role, content)
+     VALUES ($1, $2, $3) RETURNING id`,
+    [repairId, role, JSON.stringify(content)],
+  )
+  return rows[0].id as string
+}
+
+export interface MeasurementInput {
+  net?: string | null
+  refdes?: string | null
+  kind: string
+  value: number
+  unit?: string | null
+  expected?: number | null
+}
+
+export async function recordMeasurementRow(
+  client: PoolClient,
+  deviceId: string,
+  repairId: string,
+  m: MeasurementInput,
+) {
+  const netId = m.net ? await resolveNetId(client, deviceId, m.net) : null
+  const compId = m.refdes ? await resolveComponentId(client, deviceId, m.refdes) : null
+  const { rows } = await client.query(
+    `INSERT INTO measurements (repair_id, net_id, component_id, kind, value, unit, expected)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, kind, value, unit, expected`,
+    [repairId, netId, compId, m.kind, m.value, m.unit ?? null, m.expected ?? null],
+  )
+  return rows[0]
+}
+
+export async function proposeFindingRow(
+  client: PoolClient,
+  deviceId: string,
+  repairId: string,
+  refdes: string,
+  net: string | null,
+  kind: string,
+  confidence: number,
+): Promise<string> {
+  const compId = await resolveComponentId(client, deviceId, refdes)
+  const netId = net ? await resolveNetId(client, deviceId, net) : null
+  const { rows } = await client.query(
+    `INSERT INTO findings (repair_id, component_id, net_id, kind, confidence, status)
+     VALUES ($1, $2, $3, $4, $5, 'proposed') RETURNING id`,
+    [repairId, compId, netId, kind, confidence],
+  )
+  return rows[0].id as string
+}
+
+export async function saveCitation(
+  client: PoolClient,
+  messageId: string,
+  refType: 'component' | 'net',
+  refId: string,
+  source: string | null,
+) {
+  await client.query(
+    `INSERT INTO citations (message_id, ref_type, ref_id, source)
+     VALUES ($1, $2, $3, $4)`,
+    [messageId, refType, refId, source],
+  )
+}
+
+export async function saveVerification(
+  client: PoolClient,
+  findingId: string,
+  verified: boolean,
+  checks: unknown,
+) {
+  await client.query(
+    `UPDATE findings SET verified = $2, verification = $3 WHERE id = $1`,
+    [findingId, verified, JSON.stringify(checks)],
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Resolvers (RLS-safe — work on shared device rows visible to every tenant).
+// ---------------------------------------------------------------------------
+
+export async function resolveComponentId(
+  client: PoolClient,
+  deviceId: string,
+  refdes: string,
+): Promise<string | null> {
+  const { rows } = await client.query(
+    'SELECT id FROM components WHERE device_id = $1 AND refdes = $2',
+    [deviceId, refdes],
+  )
+  return rows.length ? (rows[0].id as string) : null
+}
+
+export async function resolveNetId(
+  client: PoolClient,
+  deviceId: string,
+  net: string,
+): Promise<string | null> {
+  const { rows } = await client.query(
+    'SELECT id FROM nets WHERE device_id = $1 AND name = $2',
+    [deviceId, net],
+  )
+  return rows.length ? (rows[0].id as string) : null
+}
+
+// ---------------------------------------------------------------------------
+// Per-tenant monthly meter. Returns the post-increment usage, or over:true when
+// the quota is already spent (no increment in that case).
+// ---------------------------------------------------------------------------
+export interface MeterResult {
+  used: number
+  quota: number
+  over: boolean
+}
+
+export async function meterTenant(
+  client: PoolClient,
+  tenantId: string,
+  period: string,
+): Promise<MeterResult> {
+  // Ensure the row exists for this period.
+  await client.query(
+    `INSERT INTO tenant_usage (tenant_id, period, used, quota)
+     VALUES ($1, $2, 0, 500) ON CONFLICT (tenant_id, period) DO NOTHING`,
+    [tenantId, period],
+  )
+  const { rows } = await client.query(
+    'SELECT used, quota FROM tenant_usage WHERE tenant_id = $1 AND period = $2',
+    [tenantId, period],
+  )
+  const used = Number(rows[0].used)
+  const quota = Number(rows[0].quota)
+  if (used >= quota) return { used, quota, over: true }
+
+  const { rows: inc } = await client.query(
+    `UPDATE tenant_usage SET used = used + 1
+     WHERE tenant_id = $1 AND period = $2 RETURNING used, quota`,
+    [tenantId, period],
+  )
+  return { used: Number(inc[0].used), quota: Number(inc[0].quota), over: false }
 }
