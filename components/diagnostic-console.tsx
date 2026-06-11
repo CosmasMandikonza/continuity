@@ -43,7 +43,7 @@ export function DiagnosticConsole({
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [entries, thinking])
+  }, [entries, thinking, verification, notice])
 
   const submit = () => {
     const symptom = draft.trim()
@@ -218,7 +218,7 @@ function VerificationStamp({ v }: { v: VerificationView }) {
         }`}
       >
         {ok ? <ShieldCheck size={14} strokeWidth={2} /> : <ShieldAlert size={14} strokeWidth={2} />}
-        {ok ? 'verified \u2713 against electrical_graph' : '\u26a0 unverified — needs review'}
+        {ok ? 'verified \u2713 against electrical_graph' : '\u26a0 unverified \u2014 needs review'}
         <span className="ml-auto font-mono text-[9px] font-normal text-ink-3">{v.refdes}</span>
       </div>
       {v.checks.length > 0 && (
@@ -250,7 +250,7 @@ function FixCard({
     <div className="mt-[10px] rounded-[9px] border border-[#e6a273] bg-[linear-gradient(180deg,#fbe7da,#fbeee6)] px-3 py-[11px]">
       <div className="mb-2 flex items-center gap-[7px] font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-flux">
         <PenLine size={13} strokeWidth={1.8} />
-        repair protocol · 3 steps
+        repair protocol · {steps.length} steps
       </div>
       <ol className="m-0 list-decimal pl-[18px] text-[12.5px] leading-[1.65] text-ink">
         {steps.map((seg, i) => (

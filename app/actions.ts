@@ -29,41 +29,43 @@ function fmtVolts(v: number | null): string {
   return v != null ? `${v.toFixed(2)} V` : '—'
 }
 
-// getProvenance(refdes) -> live derived card. `refdes` is the chip's prov key
-// ('U7' | 'C29' | 'J15' for components, 'PP5V0' for the net).
+// getProvenance(refdes) -> live derived card. `refdes` is the chip's prov key.
+// Scripted chips use 'U7' | 'C29' | 'J15' (components) and 'PP5V0' (net alias).
+// Live chips pass the raw token, which may be any component refdes or a full
+// net name (e.g. 'PP5V0_SYS'). We resolve a component first, then fall back to
+// a net lookup, so every chip resolves against the real board.
 export async function getProvenance(refdes: string): Promise<ProvCardView | null> {
   const deviceId = await sharedDeviceId()
   if (!deviceId) return null
 
-  // Net chip: 'PP5V0' is the demo alias for PP5V0_SYS; otherwise the live agent
-  // cites a net by its real name. Build a net card from the named net row.
-  const netName = refdes === 'PP5V0' ? 'PP5V0_SYS' : refdes
-  const looksLikeNet = refdes === 'PP5V0' || /_|^(GND|VBUS|PP|VBAT|VDD|VCC)/i.test(refdes)
-  if (looksLikeNet) {
-    const net = await netCard(deviceId, netName)
-    if (net) {
+  // The scripted net alias maps to the named net PP5V0_SYS.
+  const netAlias = refdes === 'PP5V0' ? 'PP5V0_SYS' : null
+
+  // Component chips: try the component table first (unless it's the net alias).
+  if (!netAlias) {
+    const card = await provenanceCard(deviceId, refdes)
+    if (card) {
+      const primaryNet = card.nets[0]
+      const grid: [string, string][] = [
+        ['type', card.kind + (card.value ? ` · ${card.value}` : '')],
+        ['value', card.value ?? '—'],
+        ['package', card.package ?? '—'],
+        ['net', primaryNet ? primaryNet.name : '—'],
+        ['mpn', card.mpn ?? '—'],
+      ]
       return {
-        kind: 'net',
-        rd: net.name,
-        src: 'electrical graph',
-        grid: [
-          ['class', net.netClass ? `${net.netClass} rail` : 'net'],
-          ['nominal', fmtVolts(net.nominalV)],
-          ['members', `${net.pinCount} pins`],
-          ['components', String(net.componentCount)],
-          ['on net', net.source ?? '—'],
-        ],
-        conf: '0.97',
+        kind: 'comp',
+        rd: card.refdes,
+        src: card.sourceRef ?? 'electrical graph',
+        grid,
+        conf: card.confidence != null ? card.confidence.toFixed(2) : '—',
       }
     }
   }
 
-  // Component chips.
-  const card = await provenanceCard(deviceId, refdes)
-  if (!card) {
-    // Last resort: maybe it's a net that didn't match the heuristic above.
-    const net = await netCard(deviceId, refdes)
-    if (!net) return null
+  // Net chip (alias or live net token): resolve against the net table.
+  const net = await netCard(deviceId, netAlias ?? refdes)
+  if (net) {
     return {
       kind: 'net',
       rd: net.name,
@@ -79,22 +81,7 @@ export async function getProvenance(refdes: string): Promise<ProvCardView | null
     }
   }
 
-  const primaryNet = card.nets[0]
-  const grid: [string, string][] = [
-    ['type', card.kind + (card.value ? ` · ${card.value}` : '')],
-    ['value', card.value ?? '—'],
-    ['package', card.package ?? '—'],
-    ['net', primaryNet ? primaryNet.name : '—'],
-    ['mpn', card.mpn ?? '—'],
-  ]
-
-  return {
-    kind: 'comp',
-    rd: card.refdes,
-    src: card.sourceRef ?? 'electrical graph',
-    grid,
-    conf: card.confidence != null ? card.confidence.toFixed(2) : '—',
-  }
+  return null
 }
 
 // getFailureRate -> the cross-shop fleet readout for the workbench panel.

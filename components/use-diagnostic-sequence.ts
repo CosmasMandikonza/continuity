@@ -131,6 +131,10 @@ export function useDiagnosticSequence() {
   // same phase into one growing entry (so streaming text doesn't spam the log).
   const liveBuf = useRef<{ kind: StepKind; label: string; text: string } | null>(null)
   const knownNets = useRef<Set<string>>(new Set())
+  const liveErrored = useRef(false)
+  // Count of real (non-tech) entries produced this live run, so we know whether
+  // a mid-stream error left us with usable output or a dead end.
+  const liveOutputCount = useRef(0)
 
   const flushLiveEntry = useCallback(() => {
     const buf = liveBuf.current
@@ -144,6 +148,7 @@ export function useDiagnosticSequence() {
     }
     applyStep(step)
     liveBuf.current = null
+    liveOutputCount.current += 1
   }, [applyStep])
 
   const pushUserEntry = useCallback(
@@ -160,8 +165,13 @@ export function useDiagnosticSequence() {
   )
 
   const handleChunk = useCallback(
-    (chunk: { type: string; delta?: string; data?: Record<string, unknown> }) => {
+    (chunk: { type: string; delta?: string; data?: Record<string, unknown>; errorText?: string }) => {
       const { type } = chunk
+      // A mid-stream error (e.g. model/billing failure): mark for fallback.
+      if (type === 'error') {
+        liveErrored.current = true
+        return
+      }
       // Streaming assistant text.
       if (type === 'text-delta' && chunk.delta) {
         const seg = phaseFromText((liveBuf.current?.text ?? '') + chunk.delta)
@@ -170,7 +180,6 @@ export function useDiagnosticSequence() {
           flushLiveEntry()
         }
         liveBuf.current = { kind: seg.kind, label: seg.label, text: seg.body }
-        // Live-update the in-progress entry by toggling thinking off.
         setState((p) => ({ ...p, thinking: false }))
         return
       }
@@ -275,6 +284,8 @@ export function useDiagnosticSequence() {
       reset()
       knownNets.current = new Set()
       liveBuf.current = null
+      liveErrored.current = false
+      liveOutputCount.current = 0
       // Seed the console with the tech's message and enter live/busy mode.
       setTimeout(() => {
         setState((p) => ({ ...p, live: true, busy: true, thinking: true }))
@@ -297,7 +308,6 @@ export function useDiagnosticSequence() {
         if (ct.includes('application/json')) {
           const body = (await res.json()) as { fallback?: boolean }
           if (body.fallback) {
-            // Graceful fallback: run the scripted sequence instead.
             replay()
             return
           }
@@ -308,6 +318,23 @@ export function useDiagnosticSequence() {
           handleChunk(chunk)
         }
         flushLiveEntry()
+
+        // If the stream errored mid-flight (model/billing) with no usable
+        // output, fall back to the scripted run so it's never a dead end.
+        if (liveErrored.current && liveOutputCount.current === 0) {
+          replay()
+          return
+        }
+        if (liveErrored.current) {
+          setState((p) => ({
+            ...p,
+            busy: false,
+            thinking: false,
+            notice: { kind: 'error', text: 'Live model interrupted — showing partial result' },
+          }))
+          return
+        }
+
         setState((p) => ({ ...p, busy: false, thinking: false }))
       } catch (err) {
         if (controller.signal.aborted) return

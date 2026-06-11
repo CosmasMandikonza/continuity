@@ -2,9 +2,12 @@
 
 interface FaceplateProps {
   faultLed: boolean
+  meterUsage?: { used: number; quota: number } | null
 }
 
-export function Faceplate({ faultLed }: FaceplateProps) {
+export function Faceplate({ faultLed, meterUsage }: FaceplateProps) {
+  const used = meterUsage?.used ?? 142
+  const quota = meterUsage?.quota ?? 500
   return (
     <header className="relative flex items-center gap-[18px] border-b-[1.5px] border-rule-strong bg-[linear-gradient(180deg,#efe9db,#00000000)] px-5 pb-3 pt-[13px] after:absolute after:bottom-[-1px] after:left-5 after:right-5 after:h-px after:bg-[#fff8ec] after:content-['']">
       {/* logo */}
@@ -63,7 +66,7 @@ export function Faceplate({ faultLed }: FaceplateProps) {
         OPUS&nbsp;4.8&nbsp;·&nbsp;DEEP
       </div>
       <div className="font-mono text-[10px] text-ink-3">
-        DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">142</b>/500
+        DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">{used}</b>/{quota}
       </div>
     </header>
   )
