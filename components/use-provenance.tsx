@@ -2,10 +2,11 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ROWS } from '@/lib/continuity-data'
+import type { ROWS } from '@/lib/continuity-data'
+import { getProvenance, type ProvCardView } from '@/app/actions'
 
 interface ProvState {
-  key: keyof typeof ROWS
+  view: ProvCardView
   left: number
   top: number
 }
@@ -15,23 +16,44 @@ interface ProvenanceContextValue {
   close: () => void
 }
 
+// Cache derived cards per prov key so repeated hovers are instant and we never
+// flash an empty card.
+const cardCache = new Map<string, ProvCardView>()
+
 export function useProvenance(onLit?: (compId: string | null) => void) {
   const [prov, setProv] = useState<ProvState | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guards against a stale fetch resolving after the pointer has moved away.
+  const activeKey = useRef<string | null>(null)
 
   const open = useCallback(
     (key: keyof typeof ROWS, rect: DOMRect) => {
       if (hideTimer.current) clearTimeout(hideTimer.current)
-      if (!ROWS[key]) return
+      activeKey.current = key as string
       const left = Math.min(window.innerWidth - 256, Math.max(10, rect.left - 110))
       const top = rect.bottom + 8
-      setProv({ key, left, top })
       if (key !== 'PP5V0') onLit?.('c_' + key)
+
+      const cached = cardCache.get(key as string)
+      if (cached) {
+        setProv({ view: cached, left, top })
+        return
+      }
+
+      getProvenance(key as string).then((view) => {
+        if (!view) return
+        cardCache.set(key as string, view)
+        // Only show if this key is still the one being hovered.
+        if (activeKey.current === (key as string)) {
+          setProv({ view, left, top })
+        }
+      })
     },
     [onLit],
   )
 
   const close = useCallback(() => {
+    activeKey.current = null
     hideTimer.current = setTimeout(() => {
       setProv(null)
       onLit?.(null)
@@ -50,7 +72,7 @@ export function useProvenance(onLit?: (compId: string | null) => void) {
           style={{ left: prov.left, top: prov.top }}
           className="fixed z-[60] w-[244px] rounded-[9px] border border-rule-strong bg-[linear-gradient(180deg,#fbf6ea,#f3eddf)] p-[12px_13px] shadow-[0_1px_0_#fff_inset,0_22px_44px_-16px_#00000055]"
         >
-          <ProvenanceBody pkey={prov.key} />
+          <ProvenanceBody view={prov.view} />
         </motion.div>
       )}
     </AnimatePresence>
@@ -59,8 +81,7 @@ export function useProvenance(onLit?: (compId: string | null) => void) {
   return { open, close, card }
 }
 
-function ProvenanceBody({ pkey }: { pkey: keyof typeof ROWS }) {
-  const r = ROWS[pkey]
+function ProvenanceBody({ view: r }: { view: ProvCardView }) {
   const isNet = r.kind === 'net'
   return (
     <>

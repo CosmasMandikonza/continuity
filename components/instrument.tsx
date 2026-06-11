@@ -5,6 +5,7 @@ import { useDiagnosticSequence } from './use-diagnostic-sequence'
 import { useProvenance } from './use-provenance'
 import { Faceplate } from './faceplate'
 import { RailsModule } from './rails-module'
+import { FleetPanel } from './fleet-panel'
 import { BoardScreen } from './board-screen'
 import { DiagnosticConsole } from './diagnostic-console'
 import { MeasureGauge } from './measure-gauge'
@@ -36,7 +37,10 @@ export function Instrument() {
 
       {/* deck (bento) */}
       <div className="grid min-h-0 gap-[14px] p-[14px] md:grid-cols-[160px_1fr_330px] lg:grid-cols-[172px_1fr_372px]">
-        <RailsModule />
+        <div className="hidden min-h-0 flex-col gap-[14px] md:flex">
+          <RailsModule />
+          <FleetPanel />
+        </div>
 
         {/* screen */}
         <section className="flex min-h-0 flex-col">
