@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { isClerkEnabled } from '@/lib/clerk-config'
 
-// Public routes that never require a session.
-const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)'])
+// Public routes that never require a session. The marketing landing at "/" is
+// public so signed-out visitors (and judges following the deploy link) see it;
+// everything else still requires a session when Clerk is configured.
+const isPublicRoute = createRouteMatcher(['/', '/sign-in(.*)', '/sign-up(.*)'])
 
 // When Clerk is configured, protect everything except the sign-in/up pages and
 // land signed-out users on /sign-in. When it is NOT configured (dev / no keys),

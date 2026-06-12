@@ -1,9 +1,9 @@
-import { Instrument } from '@/components/instrument'
-import { getMeterUsage } from '@/app/actions'
-import { isClerkEnabled } from '@/lib/clerk-config'
+import { Landing } from '@/components/landing'
+import { getFailureRate } from '@/app/actions'
 
+// Public marketing landing. Pulls the one real, load-bearing number (the
+// cross-shop top root-cause rate) so even the front door is database-backed.
 export default async function Page() {
-  // The signed-in shop's real usage on first paint (DEV fallback when no auth).
-  const initialUsage = await getMeterUsage()
-  return <Instrument initialUsage={initialUsage} authEnabled={isClerkEnabled()} />
+  const fleet = await getFailureRate().catch(() => null)
+  return <Landing topCause={fleet} />
 }
