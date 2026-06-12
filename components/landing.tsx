@@ -5,12 +5,6 @@ import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import type { FleetSummary } from '@/lib/queries'
 
-const CHECKS = [
-  'C29 resolves to a component row',
-  'sits on the traced path from PP5V0_SYS',
-  'measurement consistent with an open cap',
-]
-
 function Logo({ className = 'h-[26px] w-[26px]' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 30 30" fill="none" aria-hidden>
@@ -29,102 +23,241 @@ function Logo({ className = 'h-[26px] w-[26px]' }: { className?: string }) {
   )
 }
 
-// The signature moment: an agent proposes a culprit, then the database verifies
-// each claim against the electrical graph, one row at a time.
-function VerifyScreen() {
+const STATUS = ['ready', 'fault', 'tracing', 'isolating', 'verified', 'verified']
+const STATUS_COLOR = ['#39f0a3', '#ffc24d', '#f06a1f', '#ff5247', '#39f0a3', '#39f0a3']
+
+// The signature moment, as the product's real artifact: an animated schematic of
+// the power path where a no-power fault is traced to a shorted cap and then
+// verified against the electrical graph. Not a terminal — a precision readout.
+function DiagnosticTrace() {
   const reduce = useReducedMotion()
-  const [phase, setPhase] = useState(reduce ? 3 : 0)
+  const [phase, setPhase] = useState(reduce ? 5 : 0)
 
   useEffect(() => {
     if (reduce) return
-    const id = setInterval(() => setPhase((p) => (p + 1) % 5), 900)
+    const id = setInterval(() => setPhase((p) => (p + 1) % 6), 1150)
     return () => clearInterval(id)
   }, [reduce])
 
-  const verified = phase >= 3
+  const symptom = phase >= 1
+  const tracing = phase >= 2
+  const culprit = phase >= 3
+  const verified = phase >= 4
+  const status = STATUS[phase]
+  const statusColor = STATUS_COLOR[phase]
 
   return (
-    <div className="relative overflow-hidden rounded-[14px] border border-[#04130f] bg-[radial-gradient(130%_120%_at_50%_-10%,#10150f,#0b0e0c_58%,#070a08)] shadow-[0_0_0_1px_#1b2a23_inset,0_28px_60px_-30px_#000_inset,0_30px_70px_-40px_#00000099]">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-50"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #16271f 1px, transparent 1px)',
-          backgroundSize: '22px 22px',
-        }}
-      />
-      {!reduce && (
-        <motion.div
+    <div className="relative rounded-[16px] border border-[#0a1f18] bg-[radial-gradient(120%_120%_at_30%_-10%,#12211b,#0a0f0c_55%,#060a08)] p-[4px] shadow-[0_42px_90px_-38px_#000000b0,0_2px_0_#2c4a3e_inset]">
+      <div className="relative overflow-hidden rounded-[12px] border border-[#10261e] bg-[#070b09]">
+        <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 h-[40%] bg-[linear-gradient(180deg,#39f0a312,transparent)]"
-          initial={{ y: '-40%' }}
-          animate={{ y: '160%' }}
-          transition={{ duration: 4.5, repeat: Infinity, ease: 'linear' }}
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[44%] rounded-t-[12px] bg-[linear-gradient(180deg,#ffffff0d,transparent)]"
         />
-      )}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            backgroundImage: 'radial-gradient(circle, #15281f 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+          }}
+        />
 
-      <div className="relative flex items-center gap-2 border-b border-[#152a22] px-4 py-[9px]">
-        <span className="h-[6px] w-[6px] rounded-full bg-phos shadow-[0_0_7px_#39f0a3]" />
-        <span className="font-mono text-[9.5px] tracking-[0.08em] text-phos/80">
-          diagnose · MNT Reform r3
-        </span>
-        <span className="ml-auto font-mono text-[8.5px] tracking-[0.08em] text-comp/60">
-          live agent
-        </span>
-      </div>
-
-      <div className="relative space-y-[10px] px-4 py-[16px] font-mono text-[11px] leading-[1.5]">
-        <div className="text-comp/70">
-          <span className="text-comp/40">tech ›</span> no power. PP5V0 reads 0.31&nbsp;V.
-        </div>
-
-        <div className="rounded-[8px] border border-[#1c3a2e] bg-[#0c130f] p-[11px]">
-          <div className="flex items-center gap-2 text-phos/60">
-            <span className="text-[8px] uppercase tracking-[0.14em]">proposed root cause</span>
-          </div>
-          <div className="mt-[6px] flex items-baseline gap-[8px]">
-            <span className="text-[20px] font-bold leading-none text-probe">C29</span>
-            <span className="text-[11px] text-comp/80">input cap · PP5V0_SYS · open</span>
-          </div>
-
-          <div className="mt-[12px] space-y-[6px] border-t border-dashed border-[#1c3a2e] pt-[10px]">
-            {CHECKS.map((c, i) => {
-              const done = phase >= i + 1
-              return (
-                <div
-                  key={c}
-                  className="flex items-center gap-[8px] text-[10px] transition-colors duration-300"
-                  style={{ color: done ? '#39f0a3' : '#3f5a50' }}
-                >
-                  <span
-                    className="grid h-[13px] w-[13px] flex-none place-items-center rounded-full border text-[8px] transition-colors duration-300"
-                    style={{
-                      borderColor: done ? '#39f0a3' : '#2a463b',
-                      color: done ? '#39f0a3' : '#2a463b',
-                    }}
-                  >
-                    {done ? '✓' : ''}
-                  </span>
-                  {c}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between pt-[2px]">
-          <span className="text-[9px] tracking-[0.06em] text-phos/40">
-            checked against electrical_graph
-          </span>
+        <div className="relative flex items-center gap-2 border-b border-[#11261e] px-4 py-[9px]">
           <motion.span
-            initial={false}
-            animate={{ opacity: verified ? 1 : 0.18, scale: verified ? 1 : 0.96 }}
+            className="h-[7px] w-[7px] rounded-full"
+            animate={{ backgroundColor: statusColor, boxShadow: `0 0 8px ${statusColor}` }}
             transition={{ duration: 0.3 }}
-            className="rounded-[5px] border border-phos/50 bg-phos/10 px-[9px] py-[3px] text-[9px] font-semibold uppercase tracking-[0.14em] text-phos"
+          />
+          <span className="font-mono text-[9.5px] tracking-[0.12em] text-phos/70">DIAGNOSTIC TRACE</span>
+          <span className="font-mono text-[9px] text-comp/40">· MNT Reform r3</span>
+          <motion.span
+            className="ml-auto font-mono text-[9px] uppercase tracking-[0.16em]"
+            animate={{ color: statusColor }}
+            transition={{ duration: 0.3 }}
           >
-            {verified ? 'verified ✓' : 'verifying…'}
+            {status}
           </motion.span>
         </div>
+
+        <svg
+          viewBox="0 0 600 360"
+          className="relative block w-full"
+          role="img"
+          aria-label="Animated schematic tracing a no-power fault to a shorted capacitor on the PP5V0 rail"
+        >
+          <defs>
+            <filter id="trGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="2.6" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <text x="26" y="62" fontFamily="var(--font-mono)" fontSize="11" fill="#39f0a3" opacity="0.8">
+            PP5V0_SYS
+          </text>
+          <text x="26" y="78" fontFamily="var(--font-mono)" fontSize="9" fill="#39f0a3" opacity="0.4">
+            5.0 V nominal
+          </text>
+
+          <text x="24" y="142" fontFamily="var(--font-mono)" fontSize="9" fill="#86d9ff" opacity="0.55">
+            VBAT
+          </text>
+          <line x1="56" y1="155" x2="92" y2="155" stroke="#2f7d63" strokeWidth="1.4" />
+          <line x1="68" y1="148" x2="68" y2="162" stroke="#3aa6cf" strokeWidth="1.6" opacity="0.7" />
+          <line x1="74" y1="151" x2="74" y2="159" stroke="#3aa6cf" strokeWidth="1.6" opacity="0.7" />
+
+          <rect x="92" y="120" width="80" height="70" rx="6" fill="#0a120e" stroke="#3aa6cf" strokeWidth="1.4" opacity="0.9" />
+          <text x="132" y="151" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="15" fontWeight="700" fill="#86d9ff">
+            U1
+          </text>
+          <text x="132" y="167" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="8.5" fill="#86d9ff" opacity="0.55">
+            PMIC
+          </text>
+
+          <motion.line
+            x1="172"
+            y1="150"
+            x2="470"
+            y2="150"
+            strokeWidth="2"
+            animate={{ stroke: symptom ? '#ffc24d' : '#2f7d63', opacity: symptom ? 0.95 : 0.7 }}
+            transition={{ duration: 0.4 }}
+          />
+
+          <circle cx="232" cy="150" r="5" fill="#070b09" stroke="#2f7d63" strokeWidth="1.4" />
+          <text x="232" y="134" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="8" fill="#39f0a3" opacity="0.45">
+            TP12
+          </text>
+
+          <rect x="470" y="122" width="70" height="58" rx="6" fill="#0a120e" stroke="#3aa6cf" strokeWidth="1.4" opacity="0.9" />
+          <text x="505" y="149" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="13" fontWeight="700" fill="#86d9ff">
+            J15
+          </text>
+          <text x="505" y="165" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="8" fill="#86d9ff" opacity="0.55">
+            load
+          </text>
+
+          <circle cx="320" cy="150" r="3" fill="#2f7d63" />
+          <line x1="320" y1="150" x2="320" y2="196" stroke="#2f7d63" strokeWidth="1.6" opacity="0.7" />
+          <motion.line
+            x1="304"
+            y1="198"
+            x2="336"
+            y2="198"
+            strokeWidth="2.6"
+            animate={{ stroke: culprit ? '#ff5247' : '#86d9ff' }}
+            transition={{ duration: 0.3 }}
+            style={{ filter: culprit ? 'url(#trGlow)' : 'none' }}
+          />
+          <motion.line
+            x1="304"
+            y1="206"
+            x2="336"
+            y2="206"
+            strokeWidth="2.6"
+            animate={{ stroke: culprit ? '#ff5247' : '#86d9ff' }}
+            transition={{ duration: 0.3 }}
+            style={{ filter: culprit ? 'url(#trGlow)' : 'none' }}
+          />
+          <line x1="320" y1="206" x2="320" y2="250" stroke="#2f7d63" strokeWidth="1.6" opacity="0.7" />
+          <line x1="305" y1="250" x2="335" y2="250" stroke="#2f7d63" strokeWidth="1.6" />
+          <line x1="311" y1="256" x2="329" y2="256" stroke="#2f7d63" strokeWidth="1.6" opacity="0.7" />
+          <line x1="316" y1="262" x2="324" y2="262" stroke="#2f7d63" strokeWidth="1.6" opacity="0.5" />
+          <motion.text
+            x="346"
+            y="199"
+            fontFamily="var(--font-mono)"
+            fontSize="13"
+            fontWeight="700"
+            animate={{ fill: culprit ? '#ff5247' : '#86d9ff' }}
+            transition={{ duration: 0.3 }}
+          >
+            C29
+          </motion.text>
+          <text x="346" y="213" fontFamily="var(--font-mono)" fontSize="8.5" fill="#86d9ff" opacity="0.55">
+            input cap
+          </text>
+
+          {culprit && !reduce && (
+            <motion.circle
+              cx="320"
+              cy="202"
+              fill="none"
+              stroke="#ff5247"
+              strokeWidth="1.5"
+              initial={{ r: 12, opacity: 0.7 }}
+              animate={{ r: 27, opacity: 0 }}
+              transition={{ duration: 1.15, repeat: Infinity, ease: 'easeOut' }}
+            />
+          )}
+
+          <motion.path
+            d="M172 150 L320 150 L320 192"
+            fill="none"
+            stroke="#f06a1f"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: tracing ? 1 : 0, opacity: tracing ? 1 : 0 }}
+            transition={{ duration: 0.9, ease: 'easeInOut' }}
+            style={{ filter: 'drop-shadow(0 0 5px #f06a1f)' }}
+          />
+
+          <motion.g
+            initial={false}
+            animate={{ opacity: symptom ? 1 : 0, y: symptom ? 0 : -5 }}
+            transition={{ duration: 0.3 }}
+          >
+            <line x1="300" y1="150" x2="300" y2="98" stroke="#ffc24d" strokeWidth="1" strokeDasharray="2 2" opacity="0.6" />
+            <rect x="248" y="76" width="120" height="24" rx="5" fill="#16100a" stroke="#5a3d14" />
+            <text x="260" y="92" fontFamily="var(--font-mono)" fontSize="10" fill="#ff5247">
+              PP5V0 = 0.31 V
+            </text>
+            <text x="350" y="92" fontFamily="var(--font-mono)" fontSize="11" fill="#ff5247">
+              ✕
+            </text>
+          </motion.g>
+
+          <motion.g initial={false} animate={{ opacity: culprit ? 1 : 0 }} transition={{ duration: 0.35 }}>
+            <line x1="334" y1="204" x2="404" y2="248" stroke="#ff5247" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
+            <circle cx="412" cy="252" r="11" fill="#0a120e" stroke="#ff5247" strokeWidth="1.4" />
+            <text x="412" y="256" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="11" fontWeight="700" fill="#ff5247">
+              1
+            </text>
+            <text x="430" y="250" fontFamily="var(--font-mono)" fontSize="11" fontWeight="600" fill="#ff7a6e">
+              C29 · shorted
+            </text>
+            <text x="430" y="264" fontFamily="var(--font-mono)" fontSize="8.5" fill="#ff7a6e" opacity="0.65">
+              drags PP5V0 to GND
+            </text>
+          </motion.g>
+
+          <line x1="172" y1="318" x2="470" y2="318" stroke="#1c3a2e" strokeWidth="1" />
+          <line x1="172" y1="313" x2="172" y2="323" stroke="#1c3a2e" strokeWidth="1" />
+          <line x1="470" y1="313" x2="470" y2="323" stroke="#1c3a2e" strokeWidth="1" />
+          <text x="321" y="336" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="8" fill="#2f7d63" opacity="0.6">
+            PP5V0_SYS · 1 net · 6 nodes
+          </text>
+
+          <motion.g
+            initial={false}
+            animate={{ opacity: verified ? 1 : 0, y: verified ? 0 : 6 }}
+            transition={{ duration: 0.4 }}
+          >
+            <rect x="386" y="278" width="176" height="26" rx="13" fill="#0c1a13" stroke="#1f7a52" />
+            <circle cx="402" cy="291" r="7" fill="none" stroke="#39f0a3" strokeWidth="1.4" />
+            <text x="402" y="294.5" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="9" fill="#39f0a3">
+              ✓
+            </text>
+            <text x="416" y="295" fontFamily="var(--font-mono)" fontSize="9" fill="#39f0a3">
+              resolves to a real row
+            </text>
+          </motion.g>
+        </svg>
       </div>
     </div>
   )
@@ -140,15 +273,14 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
     reduce
       ? {}
       : {
-          initial: { opacity: 0, y: 14 },
+          initial: { opacity: 0, y: 16 },
           animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.55, delay, ease: 'easeOut' },
+          transition: { duration: 0.6, delay, ease: 'easeOut' },
         }
 
   return (
     <main className="min-h-dvh px-5 pb-16 pt-5 md:px-8">
-      <div className="mx-auto max-w-[1120px]">
-        {/* top bar */}
+      <div className="mx-auto max-w-[1180px]">
         <header className="flex items-center gap-3">
           <Logo />
           <div>
@@ -169,17 +301,16 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
           </div>
         </header>
 
-        {/* hero */}
-        <section className="mt-12 grid items-center gap-10 md:mt-16 md:grid-cols-[1.05fr_0.95fr] md:gap-12">
+        <section className="mt-12 grid items-center gap-10 md:mt-16 md:grid-cols-[1.04fr_0.96fr] md:gap-12">
           <motion.div {...rise(0.02)}>
-            <span className="ucl text-[11px] text-flux-ink">Board-level repair · grounded in a real graph</span>
+            <span className="ucl text-[11px] text-flux-ink">For the repair bench · grounded in a real graph</span>
             <h1 className="mt-[14px] font-display text-[40px] font-bold leading-[1.02] tracking-[-0.02em] text-ink md:text-[52px]">
               An AI repair tech that <span className="text-flux">can&rsquo;t</span> make up a part.
             </h1>
-            <p className="mt-[18px] max-w-[30rem] font-sans text-[15px] leading-[1.6] text-ink-2s">
-              Continuity diagnoses board-level electronics faults. Every component it names resolves
-              to a real row in the electrical graph — and a deterministic check re-runs each finding
-              against the schematic before it ever reaches you.
+            <p className="mt-[18px] max-w-[31rem] font-sans text-[15px] leading-[1.6] text-ink-2s">
+              Continuity takes a dead board from symptom to a single component — and because every
+              part it names is a real row in the electrical graph, your tech can probe the exact pin
+              instead of trusting a guess.
             </p>
             <div className="mt-[26px] flex flex-wrap items-center gap-3">
               <Link
@@ -201,47 +332,53 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
             </div>
           </motion.div>
 
-          <motion.div {...rise(0.16)}>
-            <VerifyScreen />
+          <motion.div {...rise(0.18)}>
+            <DiagnosticTrace />
           </motion.div>
         </section>
 
-        {/* the pipeline — three beats */}
-        <section className="mt-20 grid gap-5 md:mt-24 md:grid-cols-3">
+        <motion.p
+          {...rise(0.05)}
+          className="mx-auto mt-20 max-w-[54rem] text-center font-display text-[19px] font-medium leading-[1.45] tracking-[-0.01em] text-ink-2s md:mt-24 md:text-[23px]"
+        >
+          Board-level diagnosis still lives in one senior tech&rsquo;s head. Continuity turns that
+          instinct into a verifiable instrument the whole bench can trust — so a dead board becomes a
+          single refdes, <span className="text-ink">not an afternoon of swap-and-pray.</span>
+        </motion.p>
+
+        <section className="mt-14 grid gap-5 md:mt-16 md:grid-cols-3">
           <Beat
             n="01"
-            title="Grounded in a real graph"
-            body="Components, nets, and pins are first-class rows. The agent learns the board only through SQL — a recursive trace walks the power path, and an unknown refdes returns “no such part,” never a guess."
+            title="From symptom to one refdes"
+            body="The agent walks the board’s power path through SQL — a recursive trace over real components, nets, and pins. Ask it about a part that isn’t on the board and it tells you so. It cannot invent one."
             delay={0.02}
           />
           <Beat
             n="02"
-            title="Verified, not vibes"
-            body="A deterministic checker re-runs every finding against the graph: does the cited part exist, is it on the faulted path, is the measurement consistent? Anything that fails is flagged ⚠ before you see it."
+            title="Verified by the database, not the model"
+            body="Every finding is re-checked against the graph before it reaches you: does the cited part exist, does it sit on the faulted net, is the measurement consistent? Claims that fail are flagged, not shipped."
             delay={0.1}
           />
           <Beat
             n="03"
-            title="Smarter with every shop"
-            body={`Across the fleet, ${refdes} is the confirmed root cause ${pct}% of the time for this fault — computed by a privacy-preserving aggregate. Your repairs stay private; only the rates cross the boundary.`}
+            title="Your whole fleet, one baseline"
+            body={`Across the shops, ${refdes} is the confirmed culprit ${pct}% of the time for this fault — so you stock it ahead of the call. A privacy-preserving aggregate does the math; your repairs stay yours, only the rates cross the line.`}
             delay={0.18}
           />
         </section>
 
-        {/* stats strip */}
         <motion.section
           {...rise(0.05)}
           className="mt-16 grid grid-cols-2 overflow-hidden rounded-[14px] border border-rule-2 bg-[linear-gradient(180deg,#f3eee2,#ece6d8)] shadow-[0_1px_0_#fff8ec_inset] md:grid-cols-4"
         >
           <Stat k={`${pct}%`} v="top cross-shop root cause" />
-          <Stat k={`${repairs}`} v="confirmed repairs in the fleet" border />
+          <Stat k={`${repairs}`} v="repairs in the shared fleet" border />
           <Stat k="1024-d" v="part embeddings · pgvector" border />
-          <Stat k="0" v="ungrounded citations allowed" border />
+          <Stat k="0" v="hallucinated parts" border />
         </motion.section>
 
-        {/* footer */}
         <footer className="mt-14 flex flex-col items-center gap-2 border-t border-rule pt-8 text-center">
-          <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.06em] text-ink-3">
+          <div className="flex flex-wrap items-center justify-center gap-2 font-mono text-[10px] tracking-[0.06em] text-ink-3">
             <span>Aurora PostgreSQL + pgvector</span>
             <span className="text-rule-strong">·</span>
             <span>row-level multi-tenant</span>
@@ -271,7 +408,7 @@ function Beat({
   const reduce = useReducedMotion()
   return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, y: 14 }}
+      initial={reduce ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.55, delay, ease: 'easeOut' }}
       className="relative rounded-[13px] border border-rule-2 bg-[linear-gradient(180deg,#f3eee2,#ece6d8)] p-[18px] shadow-[0_1px_0_#fff8ec_inset,0_18px_36px_-28px_#00000055]"
@@ -290,9 +427,7 @@ function Beat({
 function Stat({ k, v, border }: { k: string; v: string; border?: boolean }) {
   return (
     <div className={`px-[18px] py-[18px] ${border ? 'border-l border-rule' : ''}`}>
-      <div className="font-display text-[26px] font-bold leading-none tracking-[-0.02em] text-flux-ink">
-        {k}
-      </div>
+      <div className="font-display text-[26px] font-bold leading-none tracking-[-0.02em] text-flux-ink">{k}</div>
       <div className="mt-[7px] font-mono text-[9.5px] leading-[1.4] text-ink-3">{v}</div>
     </div>
   )
