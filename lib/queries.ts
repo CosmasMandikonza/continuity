@@ -519,3 +519,271 @@ export async function readTenantUsage(
   if (!rows.length) return { used: 0, quota: 500 }
   return { used: Number(rows[0].used), quota: Number(rows[0].quota) }
 }
+
+// ===========================================================================
+// VIEW SURFACES — read models for the multi-view product (shell pages).
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// getGraph — the device's electrical graph as a component↔net incidence graph
+// (the faithful schematic shape). Backs the Knowledge Graph view, which renders
+// the database live (no x/y is stored; the client lays it out). Shared-device
+// rows are visible to every tenant, so this uses the unscoped reader.
+// ---------------------------------------------------------------------------
+export interface GraphComponentNode {
+  refdes: string
+  kind: string
+  value: string | null
+}
+export interface GraphNetNode {
+  name: string
+  netClass: string | null
+  nominalV: number | null
+}
+export interface GraphLink {
+  comp: string
+  net: string
+}
+export interface DeviceGraph {
+  components: GraphComponentNode[]
+  nets: GraphNetNode[]
+  links: GraphLink[]
+}
+
+export async function getGraph(deviceId: string): Promise<DeviceGraph> {
+  const [comps, nets, links] = await Promise.all([
+    query(
+      `SELECT refdes, kind, value FROM components WHERE device_id = $1 ORDER BY refdes`,
+      [deviceId],
+    ),
+    query(
+      `SELECT name, net_class, nominal_v FROM nets WHERE device_id = $1 ORDER BY name`,
+      [deviceId],
+    ),
+    query(
+      `SELECT DISTINCT c.refdes AS comp, n.name AS net
+       FROM pins p
+       JOIN components c ON c.id = p.component_id
+       JOIN nets n ON n.id = p.net_id
+       WHERE c.device_id = $1
+       ORDER BY c.refdes, n.name`,
+      [deviceId],
+    ),
+  ])
+  return {
+    components: comps.rows.map((r) => ({
+      refdes: r.refdes as string,
+      kind: r.kind as string,
+      value: r.value as string | null,
+    })),
+    nets: nets.rows.map((r) => ({
+      name: r.name as string,
+      netClass: r.net_class as string | null,
+      nominalV: r.nominal_v != null ? Number(r.nominal_v) : null,
+    })),
+    links: links.rows.map((r) => ({ comp: r.comp as string, net: r.net as string })),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// listRepairs — the signed-in shop's repair history (RLS-scoped: call inside
+// withTenant). Each row carries its latest finding so the list can show the
+// culprit and whether the verifier confirmed it.
+// ---------------------------------------------------------------------------
+export interface RepairListItem {
+  id: string
+  ref: string
+  deviceName: string
+  symptom: string | null
+  status: string
+  createdAt: string
+  findingRefdes: string | null
+  findingKind: string | null
+  findingVerified: boolean | null
+  findingConfidence: number | null
+}
+
+export async function listRepairs(
+  client: PoolClient,
+  tenantId: string,
+): Promise<RepairListItem[]> {
+  const { rows } = await client.query(
+    `SELECT r.id, r.ref, r.symptom, r.status, r.created_at,
+            d.name AS device_name,
+            f.refdes AS finding_refdes, f.kind AS finding_kind,
+            f.verified AS finding_verified, f.confidence AS finding_confidence
+     FROM repairs r
+     JOIN devices d ON d.id = r.device_id
+     LEFT JOIN LATERAL (
+       SELECT c.refdes, fi.kind, fi.verified, fi.confidence
+       FROM findings fi
+       LEFT JOIN components c ON c.id = fi.component_id
+       WHERE fi.repair_id = r.id
+       ORDER BY fi.created_at DESC
+       LIMIT 1
+     ) f ON true
+     WHERE r.tenant_id = $1
+     ORDER BY r.created_at DESC
+     LIMIT 100`,
+    [tenantId],
+  )
+  return rows.map((r) => ({
+    id: r.id as string,
+    ref: r.ref as string,
+    deviceName: r.device_name as string,
+    symptom: r.symptom as string | null,
+    status: r.status as string,
+    createdAt: (r.created_at as Date).toISOString(),
+    findingRefdes: r.finding_refdes as string | null,
+    findingKind: r.finding_kind as string | null,
+    findingVerified: r.finding_verified as boolean | null,
+    findingConfidence: r.finding_confidence != null ? Number(r.finding_confidence) : null,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// getRepairDetail — one repair's full record (RLS-scoped: call inside
+// withTenant; only the owning shop can read it). Returns the transcript, the
+// measurements, and the findings + the verifier's stamp.
+// ---------------------------------------------------------------------------
+export interface RepairMessage {
+  id: string
+  role: string
+  text: string
+  createdAt: string
+}
+export interface RepairMeasurement {
+  id: string
+  kind: string
+  value: number | null
+  unit: string | null
+  expected: number | null
+  target: string | null
+  createdAt: string
+}
+export interface RepairFinding {
+  id: string
+  refdes: string | null
+  net: string | null
+  kind: string
+  confidence: number | null
+  status: string
+  verified: boolean | null
+  createdAt: string
+}
+export interface RepairDetail {
+  id: string
+  ref: string
+  deviceName: string
+  symptom: string | null
+  status: string
+  createdAt: string
+  messages: RepairMessage[]
+  measurements: RepairMeasurement[]
+  findings: RepairFinding[]
+}
+
+function messageText(content: unknown): string {
+  if (content && typeof content === 'object' && 'text' in (content as Record<string, unknown>)) {
+    return String((content as Record<string, unknown>).text ?? '')
+  }
+  return typeof content === 'string' ? content : ''
+}
+
+export async function getRepairDetail(
+  client: PoolClient,
+  repairId: string,
+): Promise<RepairDetail | null> {
+  const { rows: head } = await client.query(
+    `SELECT r.id, r.ref, r.symptom, r.status, r.created_at, d.name AS device_name
+     FROM repairs r JOIN devices d ON d.id = r.device_id
+     WHERE r.id = $1`,
+    [repairId],
+  )
+  if (head.length === 0) return null
+  const h = head[0]
+
+  const { rows: msgs } = await client.query(
+    `SELECT id, role, content, created_at FROM messages
+     WHERE repair_id = $1 ORDER BY created_at`,
+    [repairId],
+  )
+  const { rows: meas } = await client.query(
+    `SELECT m.id, m.kind, m.value, m.unit, m.expected, m.created_at,
+            c.refdes AS comp_refdes, n.name AS net_name
+     FROM measurements m
+     LEFT JOIN components c ON c.id = m.component_id
+     LEFT JOIN nets n ON n.id = m.net_id
+     WHERE m.repair_id = $1 ORDER BY m.created_at`,
+    [repairId],
+  )
+  const { rows: finds } = await client.query(
+    `SELECT f.id, f.kind, f.confidence, f.status, f.verified, f.created_at,
+            c.refdes AS comp_refdes, n.name AS net_name
+     FROM findings f
+     LEFT JOIN components c ON c.id = f.component_id
+     LEFT JOIN nets n ON n.id = f.net_id
+     WHERE f.repair_id = $1 ORDER BY f.created_at`,
+    [repairId],
+  )
+
+  return {
+    id: h.id as string,
+    ref: h.ref as string,
+    deviceName: h.device_name as string,
+    symptom: h.symptom as string | null,
+    status: h.status as string,
+    createdAt: (h.created_at as Date).toISOString(),
+    messages: msgs.map((m) => ({
+      id: m.id as string,
+      role: m.role as string,
+      text: messageText(m.content),
+      createdAt: (m.created_at as Date).toISOString(),
+    })),
+    measurements: meas.map((m) => ({
+      id: m.id as string,
+      kind: m.kind as string,
+      value: m.value != null ? Number(m.value) : null,
+      unit: m.unit as string | null,
+      expected: m.expected != null ? Number(m.expected) : null,
+      target: (m.comp_refdes as string | null) ?? (m.net_name as string | null),
+      createdAt: (m.created_at as Date).toISOString(),
+    })),
+    findings: finds.map((f) => ({
+      id: f.id as string,
+      refdes: f.comp_refdes as string | null,
+      net: f.net_name as string | null,
+      kind: f.kind as string,
+      confidence: f.confidence != null ? Number(f.confidence) : null,
+      status: f.status as string,
+      verified: f.verified as boolean | null,
+      createdAt: (f.created_at as Date).toISOString(),
+    })),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// fleetBreakdown — the full cross-shop root-cause distribution for a symptom,
+// plus the contributing-shop count. Every number comes from the SECURITY
+// DEFINER aggregates, which read past RLS but return only percentages — never
+// another shop's rows. Backs the Fleet / Insights view.
+// ---------------------------------------------------------------------------
+export interface FleetBreakdown {
+  symptom: string
+  shops: number
+  totalRepairs: number
+  rows: FailureRateRow[]
+}
+
+export async function fleetBreakdown(
+  deviceName: string,
+  symptom: string,
+): Promise<FleetBreakdown | null> {
+  const deviceId = await deviceIdByName(deviceName)
+  if (!deviceId) return null
+  const rows = await failureRate(deviceId, symptom)
+  const { rows: s } = await query('SELECT fleet_shops($1, $2) AS shops', [deviceId, symptom])
+  const shops = s.length ? Number(s[0].shops) : 0
+  const totalRepairs = rows[0]?.totalRepairs ?? 0
+  return { symptom, shops, totalRepairs, rows }
+}

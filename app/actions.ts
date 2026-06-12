@@ -9,7 +9,15 @@ import {
   deviceIdByName,
   fleetSummary,
   readTenantUsage,
+  getGraph,
+  listRepairs,
+  getRepairDetail,
+  fleetBreakdown,
   type FleetSummary,
+  type DeviceGraph,
+  type RepairListItem,
+  type RepairDetail,
+  type FleetBreakdown,
 } from '@/lib/queries'
 import { withTenant } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
@@ -101,4 +109,35 @@ export async function getMeterUsage(): Promise<{ used: number; quota: number }> 
   const tenantId = await getTenantId()
   const period = new Date().toISOString().slice(0, 7) // YYYY-MM
   return withTenant(tenantId, (client) => readTenantUsage(client, tenantId, period))
+}
+
+// getDeviceGraph -> the shared MNT Reform's full electrical graph for the
+// Knowledge Graph view. Shared device, so no tenant scoping is needed.
+export async function getDeviceGraph(deviceName = DEVICE_NAME): Promise<DeviceGraph | null> {
+  const deviceId = await deviceIdByName(deviceName)
+  if (!deviceId) return null
+  return getGraph(deviceId)
+}
+
+// listRepairsAction -> the signed-in shop's repair history (RLS-scoped). A new
+// shop with no diagnostics yet gets an empty list.
+export async function listRepairsAction(): Promise<RepairListItem[]> {
+  const tenantId = await getTenantId()
+  return withTenant(tenantId, (client) => listRepairs(client, tenantId))
+}
+
+// getRepairDetailAction -> one repair's full record (RLS-scoped; only the owning
+// shop can read it). Returns null for an id the current shop doesn't own.
+export async function getRepairDetailAction(repairId: string): Promise<RepairDetail | null> {
+  const tenantId = await getTenantId()
+  return withTenant(tenantId, (client) => getRepairDetail(client, repairId))
+}
+
+// getFleetBreakdown -> the full cross-shop root-cause distribution for the Fleet
+// view. Privacy-preserving aggregate; returns rates only, never tenant rows.
+export async function getFleetBreakdown(
+  deviceName = DEVICE_NAME,
+  symptom = 'no power',
+): Promise<FleetBreakdown | null> {
+  return fleetBreakdown(deviceName, symptom)
 }
