@@ -3,19 +3,21 @@
 import { useCallback } from 'react'
 import { useDiagnosticSequence } from './use-diagnostic-sequence'
 import { useProvenance } from './use-provenance'
-import { Faceplate } from './faceplate'
+import { Chassis } from './chassis'
 import { RailsModule } from './rails-module'
 import { FleetPanel } from './fleet-panel'
 import { BoardScreen } from './board-screen'
 import { DiagnosticConsole } from './diagnostic-console'
 import { MeasureGauge } from './measure-gauge'
-import { FooterStrip } from './footer-strip'
 
 interface InstrumentProps {
   initialUsage?: { used: number; quota: number } | null
   authEnabled?: boolean
 }
 
+// The Workbench view. The chassis frame, faceplate, nav rail, and footer now
+// live in <Chassis>; this component owns only the deck + the live diagnostic
+// state it passes up to the shared chrome.
 export function Instrument({ initialUsage = null, authEnabled = false }: InstrumentProps) {
   const { state, replay, runLive } = useDiagnosticSequence()
 
@@ -29,21 +31,12 @@ export function Instrument({ initialUsage = null, authEnabled = false }: Instrum
   const { open, close, card } = useProvenance(handleLit)
 
   return (
-    <main
-      className="fixed inset-[18px] grid grid-rows-[auto_1fr_auto] overflow-hidden rounded-[14px] border border-rule-2 bg-[linear-gradient(180deg,#f1ecdf,#e7e1d3)] shadow-[0_1px_0_#fff8ec_inset,0_-22px_50px_-30px_#00000040_inset,0_40px_90px_-40px_#00000070,0_2px_0_#fffaf0]"
+    <Chassis
+      faultLed={state.faultLed}
+      busy={state.busy}
+      meterUsage={state.meterUsage ?? initialUsage}
+      authEnabled={authEnabled}
     >
-      {/* corner rivets */}
-      <Rivet className="left-[11px] top-[11px]" />
-      <Rivet className="right-[11px] top-[11px]" />
-      <Rivet className="bottom-[11px] left-[11px]" />
-      <Rivet className="bottom-[11px] right-[11px]" />
-
-      <Faceplate
-        faultLed={state.faultLed}
-        meterUsage={state.meterUsage ?? initialUsage}
-        authEnabled={authEnabled}
-      />
-
       {/* deck (bento) */}
       <div className="grid min-h-0 gap-[14px] p-[14px] md:grid-cols-[160px_1fr_330px] lg:grid-cols-[172px_1fr_372px]">
         <div className="hidden min-h-0 flex-col gap-[14px] md:flex">
@@ -73,18 +66,7 @@ export function Instrument({ initialUsage = null, authEnabled = false }: Instrum
         </div>
       </div>
 
-      <FooterStrip busy={state.busy} />
-
       {card}
-    </main>
-  )
-}
-
-function Rivet({ className }: { className: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`absolute z-[6] h-[7px] w-[7px] rounded-full bg-[radial-gradient(circle_at_35%_30%,#fffaf0,#b3a98f_70%,#968b71)] shadow-[0_1px_1px_#00000040] ${className}`}
-    />
+    </Chassis>
   )
 }
