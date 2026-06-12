@@ -50,12 +50,27 @@ const PHASE_KIND: Record<string, StepKind> = {
   FIX: 'fix',
 }
 
+// Any complete phase tag, anywhere in the text (weaker models scatter them).
+const PHASE_RE = /\[(TRACE|MEASURE|CAUSE|FIX)\]/gi
+
 export function phaseFromText(text: string): { kind: StepKind; label: string; body: string } {
-  const m = text.match(/^\s*\[([A-Z]+)\]\s*/)
-  if (m && PHASE_KIND[m[1]]) {
-    return { kind: PHASE_KIND[m[1]], label: m[1], body: text.slice(m[0].length) }
-  }
-  return { kind: 'trace', label: 'NOTE', body: text.trim() }
+  // The first complete tag — even mid-sentence — decides this entry's phase.
+  // Because callers parse the full accumulated buffer each delta, this label
+  // stays stable as more text streams in (it no longer reverts to NOTE once the
+  // tag scrolls out of view).
+  const first = text.match(/\[(TRACE|MEASURE|CAUSE|FIX)\]/i)
+  const label = first ? first[1].toUpperCase() : 'NOTE'
+  const kind: StepKind = label === 'NOTE' ? 'trace' : PHASE_KIND[label]
+  // Display body: strip every complete tag, drop a dangling partial tag at the
+  // end ("[TRAC" arriving before its closing bracket lands on the next chunk),
+  // and tidy whitespace — so no markup ever leaks into the console.
+  const body = text
+    .replace(PHASE_RE, ' ')
+    .replace(/\[[A-Za-z]*$/, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .trim()
+  return { kind, label, body }
 }
 
 // ---- turn plain model text into chip-annotated Segment[] --------------------

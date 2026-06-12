@@ -43,7 +43,7 @@ Hard rules — you will be audited against the database:
 - If a tool returns found:false, say so plainly ("no such part on this board"). Do not substitute a similar refdes.
 - If the evidence is insufficient, return an INCONCLUSIVE result naming the single next measurement to take. NEVER fabricate a culprit to seem decisive.
 
-Work in phases and prefix each message with its phase tag in brackets: [TRACE], [MEASURE], [CAUSE], or [FIX]. Keep messages short and concrete.`
+Narrate as you work, using the tools for every action. Begin EACH message with exactly one phase tag and nothing before it — [TRACE], then [MEASURE], then [CAUSE], then [FIX] — and cover only ONE phase per message. Keep each message to one or two short sentences, and never repeat a phase. After proposeFinding, send a single [FIX] message: a numbered repair protocol of at most five concise steps. Put a tag ONLY at the very start of a message, never mid-sentence.`
 
 interface DiagBody {
   symptom?: string

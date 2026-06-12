@@ -129,7 +129,7 @@ export function useDiagnosticSequence() {
   // --- live console helpers --------------------------------------------------
   // Append a model-derived console entry, coalescing consecutive deltas of the
   // same phase into one growing entry (so streaming text doesn't spam the log).
-  const liveBuf = useRef<{ kind: StepKind; label: string; text: string } | null>(null)
+  const liveBuf = useRef<{ kind: StepKind; label: string; text: string; raw: string } | null>(null)
   const knownNets = useRef<Set<string>>(new Set())
   const liveErrored = useRef(false)
   // Count of real (non-tech) entries produced this live run, so we know whether
@@ -174,12 +174,13 @@ export function useDiagnosticSequence() {
       }
       // Streaming assistant text.
       if (type === 'text-delta' && chunk.delta) {
-        const seg = phaseFromText((liveBuf.current?.text ?? '') + chunk.delta)
-        // If a new phase tag appears mid-stream, flush the previous entry first.
-        if (liveBuf.current && liveBuf.current.label !== seg.label && seg.label !== 'NOTE') {
-          flushLiveEntry()
-        }
-        liveBuf.current = { kind: seg.kind, label: seg.label, text: seg.body }
+        // Accumulate the RAW text (tags intact) so the phase label — taken from
+        // the first tag — stays stable as more deltas arrive. The displayed body
+        // is the tag-stripped version. Entries are separated on finish-step (one
+        // per tool round-trip), so there's no fragile mid-stream splitting here.
+        const raw = (liveBuf.current?.raw ?? '') + chunk.delta
+        const seg = phaseFromText(raw)
+        liveBuf.current = { kind: seg.kind, label: seg.label, text: seg.body, raw }
         setState((p) => ({ ...p, thinking: false }))
         return
       }
