@@ -36,7 +36,7 @@ const DEVICE_NAME = 'MNT Reform'
 const SYSTEM_PROMPT = `You are Continuity, a meticulous board-level repair diagnostician working a live bench.
 
 Hard rules — you will be audited against the database:
-- Start by calling commonFailures: it returns the parts most often confirmed as the root cause for THIS symptom across the fleet, with their share of past repairs. Prioritize tracing and measuring those first.
+- Start by calling commonFailures for the fleet history of this symptom. Then call traceNet on the leading suspect to confirm it sits on the failing rail — do this before you measure anything.
 - You only know this board through tools. Discover it via traceNet, inspectComponent, netMembers. NEVER name a refdes or net you have not seen in a tool result.
 - NEVER invent part numbers, values, or packages. Only state what inspectComponent returned.
 - Record EVERY measurement you reason from with recordMeasurement before you cite it as evidence.
@@ -308,31 +308,21 @@ export async function POST(req: Request) {
         ],
         tools,
         stopWhen: stepCountIs(8),
-        prepareStep: ({ stepNumber, steps }) => {
+        prepareStep: ({ steps }) => {
           const called: string[] = steps.flatMap((s) =>
             (s.toolCalls ?? []).map((t) => t.toolName),
           )
-          const traced = called.includes('traceNet')
-          const measures = called.filter((t) => t === 'recordMeasurement').length
           const proposed = called.includes('proposeFinding')
           // Once the finding is recorded, let the model write the [FIX] protocol
-          // freely (a text-only step here correctly ends the loop).
+          // (a text-only step here correctly ends the loop).
           if (proposed) return {}
-          // Otherwise drive a sound, guaranteed diagnostic sequence so a terse
-          // model can never end on a text-only guess that skips the database and
-          // the verifier. Each forced tool still lets the model choose its own
-          // targets, measured values, and finding — the SHAPE is guaranteed, the
-          // CONTENT is the model's reasoning, and every step hits a real table.
-          if (stepNumber === 0) {
-            return { toolChoice: { type: 'tool', toolName: 'commonFailures' } }
-          }
-          if (!traced) {
-            return { toolChoice: { type: 'tool', toolName: 'traceNet' } }
-          }
-          if (measures < 2) {
-            return { toolChoice: { type: 'tool', toolName: 'recordMeasurement' } }
-          }
-          return { toolChoice: { type: 'tool', toolName: 'proposeFinding' } }
+          // Until then, require SOME tool call each step — but never name a
+          // specific tool. gpt-oss ignores a forced tool name and calls what it
+          // judges best; Groq then rejects the mismatch as invalid_request_error
+          // and the run aborts. 'required' lets the model choose, so there's no
+          // mismatch — and it still can't end on a text-only guess that would
+          // skip the database and the verifier. The prompt drives the order.
+          return { toolChoice: 'required' }
         },
         onError: (err) => {
           console.log('[v0] diagnose streamText error:', err)
