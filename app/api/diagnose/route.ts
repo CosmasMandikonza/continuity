@@ -22,6 +22,7 @@ import {
   resolveComponentId,
   resolveNetId,
   meterTenant,
+  failureRate,
 } from '@/lib/queries'
 import { verifyFinding } from '@/lib/verify'
 import { diagnosticModel, modelProviderOptions, HAS_MODEL_CREDS } from '@/lib/model'
@@ -35,6 +36,7 @@ const DEVICE_NAME = 'MNT Reform'
 const SYSTEM_PROMPT = `You are Continuity, a meticulous board-level repair diagnostician working a live bench.
 
 Hard rules — you will be audited against the database:
+- Start by calling commonFailures: it returns the parts most often confirmed as the root cause for THIS symptom across the fleet, with their share of past repairs. Prioritize tracing and measuring those first.
 - You only know this board through tools. Discover it via traceNet, inspectComponent, netMembers. NEVER name a refdes or net you have not seen in a tool result.
 - NEVER invent part numbers, values, or packages. Only state what inspectComponent returned.
 - Record EVERY measurement you reason from with recordMeasurement before you cite it as evidence.
@@ -42,6 +44,7 @@ Hard rules — you will be audited against the database:
 - A 'short' finding requires a recorded low-resistance measurement on that part/net. A rail collapse requires a measured voltage well below the net's nominal. Take those measurements first.
 - If a tool returns found:false, say so plainly ("no such part on this board"). Do not substitute a similar refdes.
 - If the evidence is insufficient, return an INCONCLUSIVE result naming the single next measurement to take. NEVER fabricate a culprit to seem decisive.
+- CALL tools through the function interface — never write a tool name (commonFailures, traceNet, recordMeasurement, proposeFinding) or its arguments in your visible text. Your messages are read by a human technician and must be plain English, never code or a function call.
 
 Narrate as you work, using the tools for every action. Begin EACH message with exactly one phase tag and nothing before it — [TRACE], then [MEASURE], then [CAUSE], then [FIX] — and cover only ONE phase per message. Keep each message to one or two short sentences, and never repeat a phase. After proposeFinding, send a single [FIX] message: a numbered repair protocol of at most five concise steps. Put a tag ONLY at the very start of a message, never mid-sentence.`
 
@@ -116,6 +119,25 @@ export async function POST(req: Request) {
 
       // ---- c) tools (the ONLY way the agent learns the board) -------------
       const tools = {
+        commonFailures: tool({
+          description:
+            'Fleet history for THIS symptom: the components most often confirmed as the root cause across all shops, with their share of past repairs. Call this FIRST to decide which parts to trace and measure.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            const rows = await failureRate(deviceId, symptom)
+            rows.forEach((r) => citedRefdes.add(r.refdes))
+            return {
+              symptom,
+              topCauses: rows.slice(0, 5).map((r) => ({
+                refdes: r.refdes,
+                kind: r.kind,
+                pctOfRepairs: r.pct,
+                confirmedRepairs: r.rootCauses,
+              })),
+            }
+          },
+        }),
+
         traceNet: tool({
           description:
             'Walk the electrical graph outward from a reference designator. Returns electrically connected components with hop distance, excluding ground/high-fanout power rails. Use this to find what a failing net touches.',
@@ -250,7 +272,29 @@ export async function POST(req: Request) {
           },
         ],
         tools,
-        stopWhen: stepCountIs(10),
+        stopWhen: stepCountIs(8),
+        prepareStep: ({ stepNumber, steps }) => {
+          const called: string[] = steps.flatMap((s) =>
+            (s.toolCalls ?? []).map((t) => t.toolName),
+          )
+          const measured = called.includes('recordMeasurement')
+          const proposed = called.includes('proposeFinding')
+          // Step 0: force a tool call so a reasoning model can't answer from
+          // priors — it must investigate (the prompt points it at
+          // commonFailures first).
+          if (stepNumber === 0) return { toolChoice: 'required' }
+          // Don't let it conclude on no evidence: require a measurement first.
+          if (stepNumber >= 4 && !measured && !proposed) {
+            return { toolChoice: { type: 'tool', toolName: 'recordMeasurement' } }
+          }
+          // Guarantee the single root-cause finding — and therefore the
+          // deterministic verifier — ALWAYS fires, even if the model would
+          // rather narrate it. This is what makes "verified" a guarantee.
+          if (stepNumber >= 6 && !proposed) {
+            return { toolChoice: { type: 'tool', toolName: 'proposeFinding' } }
+          }
+          return {}
+        },
         onError: (err) => {
           console.log('[v0] diagnose streamText error:', err)
         },
