@@ -312,23 +312,27 @@ export async function POST(req: Request) {
           const called: string[] = steps.flatMap((s) =>
             (s.toolCalls ?? []).map((t) => t.toolName),
           )
-          const measured = called.includes('recordMeasurement')
+          const traced = called.includes('traceNet')
+          const measures = called.filter((t) => t === 'recordMeasurement').length
           const proposed = called.includes('proposeFinding')
-          // Step 0: force a tool call so a reasoning model can't answer from
-          // priors — it must investigate (the prompt points it at
-          // commonFailures first).
-          if (stepNumber === 0) return { toolChoice: 'required' }
-          // Don't let it conclude on no evidence: require a measurement first.
-          if (stepNumber >= 4 && !measured && !proposed) {
+          // Once the finding is recorded, let the model write the [FIX] protocol
+          // freely (a text-only step here correctly ends the loop).
+          if (proposed) return {}
+          // Otherwise drive a sound, guaranteed diagnostic sequence so a terse
+          // model can never end on a text-only guess that skips the database and
+          // the verifier. Each forced tool still lets the model choose its own
+          // targets, measured values, and finding — the SHAPE is guaranteed, the
+          // CONTENT is the model's reasoning, and every step hits a real table.
+          if (stepNumber === 0) {
+            return { toolChoice: { type: 'tool', toolName: 'commonFailures' } }
+          }
+          if (!traced) {
+            return { toolChoice: { type: 'tool', toolName: 'traceNet' } }
+          }
+          if (measures < 2) {
             return { toolChoice: { type: 'tool', toolName: 'recordMeasurement' } }
           }
-          // Guarantee the single root-cause finding — and therefore the
-          // deterministic verifier — ALWAYS fires, even if the model would
-          // rather narrate it. This is what makes "verified" a guarantee.
-          if (stepNumber >= 6 && !proposed) {
-            return { toolChoice: { type: 'tool', toolName: 'proposeFinding' } }
-          }
-          return {}
+          return { toolChoice: { type: 'tool', toolName: 'proposeFinding' } }
         },
         onError: (err) => {
           console.log('[v0] diagnose streamText error:', err)
