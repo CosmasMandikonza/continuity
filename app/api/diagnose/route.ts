@@ -118,6 +118,15 @@ export async function POST(req: Request) {
       })
 
       // ---- c) tools (the ONLY way the agent learns the board) -------------
+      // Push a clean transcript line built from a REAL tool result, so the
+      // console shows the full TRACE → MEASURE → CAUSE story even when a terse
+      // model does the work via tool calls without narrating each phase.
+      const logLine = (
+        kind: 'trace' | 'measure' | 'cause' | 'fix',
+        label: string,
+        text: string,
+      ) => writer.write({ type: 'data-log', data: { kind, label, text } })
+
       const tools = {
         commonFailures: tool({
           description:
@@ -126,6 +135,14 @@ export async function POST(req: Request) {
           execute: async () => {
             const rows = await failureRate(deviceId, symptom)
             rows.forEach((r) => citedRefdes.add(r.refdes))
+            const top = rows.slice(0, 4)
+            if (top.length) {
+              logLine(
+                'trace',
+                'FLEET',
+                `History for "${symptom}": ${top.map((r) => `${r.refdes} ${Math.round(r.pct)}%`).join(', ')}.`,
+              )
+            }
             return {
               symptom,
               topCauses: rows.slice(0, 5).map((r) => ({
@@ -159,6 +176,14 @@ export async function POST(req: Request) {
                 nodes: res.nodes.map((n) => ({ refdes: n.refdes, hop: n.hop, viaNet: n.viaNet })),
               },
             })
+            if (res.found) {
+              const names = res.nodes.slice(0, 6).map((n) => n.refdes)
+              logLine(
+                'trace',
+                'TRACE',
+                `Walked the graph from ${res.start?.refdes ?? refdes}: ${names.join(', ')}${res.nodes.length > 6 ? '…' : ''}.`,
+              )
+            }
             return res
           },
         }),
@@ -224,6 +249,11 @@ export async function POST(req: Request) {
               type: 'data-measure',
               data: { target, kind, value, unit },
             })
+            logLine(
+              'measure',
+              'MEASURE',
+              `${target} reads ${value}${unit ? ' ' + unit : ''} (${kind}).`,
+            )
             return { recorded: true, ...row }
           },
         }),
@@ -255,6 +285,11 @@ export async function POST(req: Request) {
               type: 'data-finding',
               data: { refdes, net, kind, confidence },
             })
+            logLine(
+              'cause',
+              'CAUSE',
+              `${refdes}${net ? ' on ' + net : ''}: ${kind}, confidence ${confidence.toFixed(2)}.`,
+            )
             return { proposed: true, findingId, refdes, kind, confidence }
           },
         }),

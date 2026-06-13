@@ -215,6 +215,20 @@ export function useDiagnosticSequence() {
             notice: { kind: 'throttle', text: 'Too many requests — try again in a moment' },
           }))
           break
+        case 'data-log': {
+          const logText = String(data.text ?? '').trim()
+          if (logText) {
+            applyStep({
+              k: String(data.kind ?? 'trace') as StepKind,
+              label: String(data.label ?? '').toUpperCase() || 'NOTE',
+              when: nowLabel(),
+              delay: 0,
+              content: segmentize(logText, knownNets.current),
+            })
+            liveOutputCount.current += 1
+          }
+          break
+        }
         case 'data-trace': {
           const start = String(data.start ?? '')
           const nodes = (data.nodes as { refdes: string; viaNet?: string }[]) ?? []
@@ -277,7 +291,7 @@ export function useDiagnosticSequence() {
         }
       }
     },
-    [flushLiveEntry],
+    [flushLiveEntry, applyStep],
   )
 
   const runLive = useCallback(
