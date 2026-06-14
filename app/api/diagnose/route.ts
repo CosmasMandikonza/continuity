@@ -23,6 +23,7 @@ import {
   resolveNetId,
   meterTenant,
   failureRate,
+  similarCases as findSimilarCases,
 } from '@/lib/queries'
 import { verifyFinding } from '@/lib/verify'
 import { diagnosticModel, modelProviderOptions, HAS_MODEL_CREDS } from '@/lib/model'
@@ -36,7 +37,7 @@ const DEVICE_NAME = 'MNT Reform'
 const SYSTEM_PROMPT = `You are Continuity, a meticulous board-level repair diagnostician working a live bench.
 
 Hard rules — you will be audited against the database:
-- Start by calling commonFailures for the fleet history of this symptom. Then call traceNet on the leading suspect to confirm it sits on the failing rail — do this before you measure anything.
+- Start by calling commonFailures for the fleet history of this symptom, then similarCases to pull semantically similar past cases (matched by meaning, so it works even when commonFailures finds no exact match). Then call traceNet on the leading suspect to confirm it sits on the failing rail — do this before you measure anything.
 - You only know this board through tools. Discover it via traceNet, inspectComponent, netMembers. NEVER name a refdes or net you have not seen in a tool result.
 - NEVER invent part numbers, values, or packages. Only state what inspectComponent returned.
 - Record EVERY measurement you reason from with recordMeasurement before you cite it as evidence.
@@ -44,7 +45,7 @@ Hard rules — you will be audited against the database:
 - A 'short' finding requires a recorded low-resistance measurement on that part/net. A rail collapse requires a measured voltage well below the net's nominal. Take those measurements first.
 - If a tool returns found:false, say so plainly ("no such part on this board"). Do not substitute a similar refdes.
 - If the evidence is insufficient, return an INCONCLUSIVE result naming the single next measurement to take. NEVER fabricate a culprit to seem decisive.
-- CALL tools through the function interface — never write a tool name (commonFailures, traceNet, recordMeasurement, proposeFinding) or its arguments in your visible text. Your messages are read by a human technician and must be plain English, never code or a function call.
+- CALL tools through the function interface — never write a tool name (commonFailures, similarCases, traceNet, recordMeasurement, proposeFinding) or its arguments in your visible text. Your messages are read by a human technician and must be plain English, never code or a function call.
 
 Narrate as you work, using the tools for every action. Begin EACH message with exactly one phase tag and nothing before it — [TRACE], then [MEASURE], then [CAUSE], then [FIX] — and cover only ONE phase per message. Keep each message to one or two short sentences, and never repeat a phase. After proposeFinding, send a single [FIX] message: a numbered repair protocol of at most five concise steps. Put a tag ONLY at the very start of a message, never mid-sentence.`
 
@@ -151,6 +152,44 @@ export async function POST(req: Request) {
                 pctOfRepairs: r.pct,
                 confirmedRepairs: r.rootCauses,
               })),
+            }
+          },
+        }),
+
+        similarCases: tool({
+          description:
+            'Semantically similar PAST cases for this symptom, retrieved by meaning using vector search (pgvector) — finds relevant confirmed history even when the technician describes the fault in unusual words, where an exact-text lookup would miss. Returns the closest cases across the fleet with a cosine similarity score.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            try {
+              const matches = await findSimilarCases(symptom, deviceId)
+              matches.forEach((m) => m.refdes && citedRefdes.add(m.refdes))
+              if (matches.length) {
+                const top = matches[0]
+                const tally = new Map<string, number>()
+                matches.forEach((m) => {
+                  if (m.refdes) tally.set(m.refdes, (tally.get(m.refdes) || 0) + 1)
+                })
+                const lead = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]
+                logLine(
+                  'trace',
+                  'CASES',
+                  `Symptom embeds to ${top.similarity.toFixed(2)} cosine similarity with ${matches.length} confirmed case${matches.length === 1 ? '' : 's'} (pgvector)${lead ? `; ${lead[0]} is the leading root cause (${lead[1]}/${matches.length})` : ''}.`,
+                )
+              } else {
+                logLine('trace', 'CASES', 'No embedded cases to match against yet.')
+              }
+              return {
+                symptom,
+                matches: matches.map((m) => ({
+                  refdes: m.refdes,
+                  net: m.net,
+                  similarity: m.similarity,
+                })),
+              }
+            } catch (err) {
+              logLine('trace', 'CASES', 'Semantic case retrieval is unavailable for this run.')
+              return { symptom, matches: [], error: (err as Error).message }
             }
           },
         }),
@@ -307,7 +346,7 @@ export async function POST(req: Request) {
           },
         ],
         tools,
-        stopWhen: stepCountIs(8),
+        stopWhen: stepCountIs(10),
         prepareStep: ({ stepNumber }) => {
           // Force a tool call ONLY on the opening step, so the model starts by
           // investigating (it calls commonFailures) instead of answering from

@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg'
 import { query } from './db'
+import { embedText, toVectorLiteral } from './embed'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -786,4 +787,40 @@ export async function fleetBreakdown(
   const shops = s.length ? Number(s[0].shops) : 0
   const totalRepairs = rows[0]?.totalRepairs ?? 0
   return { symptom, shops, totalRepairs, rows }
+}
+
+// ---------------------------------------------------------------------------
+// similarCases — pgvector semantic retrieval. Embeds the free-text symptom as a
+// query vector and returns the closest CONFIRMED past cases across the fleet by
+// cosine distance (HNSW index). Complements failureRate(): that needs an exact
+// symptom string; this finds relevant history from any phrasing.
+// ---------------------------------------------------------------------------
+export interface SimilarCaseRow {
+  refdes: string | null
+  net: string | null
+  kind: string
+  confidence: number | null
+  symptom: string | null
+  similarity: number
+}
+
+export async function similarCases(
+  symptom: string,
+  deviceId: string,
+  k = 8,
+): Promise<SimilarCaseRow[]> {
+  const emb = await embedText(symptom, 'search_query')
+  const { rows } = await query('SELECT * FROM similar_findings($1::vector, $2::uuid, $3::int)', [
+    toVectorLiteral(emb),
+    deviceId,
+    k,
+  ])
+  return rows.map((r) => ({
+    refdes: (r.refdes as string | null) ?? null,
+    net: (r.net as string | null) ?? null,
+    kind: r.kind as string,
+    confidence: r.confidence != null ? Number(r.confidence) : null,
+    symptom: (r.symptom as string | null) ?? null,
+    similarity: Number(r.similarity),
+  }))
 }
