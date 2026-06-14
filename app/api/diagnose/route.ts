@@ -308,21 +308,19 @@ export async function POST(req: Request) {
         ],
         tools,
         stopWhen: stepCountIs(8),
-        prepareStep: ({ steps }) => {
-          const called: string[] = steps.flatMap((s) =>
-            (s.toolCalls ?? []).map((t) => t.toolName),
-          )
-          const proposed = called.includes('proposeFinding')
-          // Once the finding is recorded, let the model write the [FIX] protocol
-          // (a text-only step here correctly ends the loop).
-          if (proposed) return {}
-          // Until then, require SOME tool call each step — but never name a
-          // specific tool. gpt-oss ignores a forced tool name and calls what it
-          // judges best; Groq then rejects the mismatch as invalid_request_error
-          // and the run aborts. 'required' lets the model choose, so there's no
-          // mismatch — and it still can't end on a text-only guess that would
-          // skip the database and the verifier. The prompt drives the order.
-          return { toolChoice: 'required' }
+        prepareStep: ({ stepNumber }) => {
+          // Force a tool call ONLY on the opening step, so the model starts by
+          // investigating (it calls commonFailures) instead of answering from
+          // priors. After that, 'auto'.
+          //
+          // Why we don't constrain later steps: gpt-oss on Groq rejects
+          // tool_choice both ways — naming a specific tool errors when it calls
+          // a different one ("does not match request.tool_choice"), and
+          // 'required' errors when it emits a narration-only step ("did not call
+          // a tool"). It interleaves prose with tool calls, so only 'auto' is
+          // safe after the opening. The prompt drives trace → measure → propose.
+          if (stepNumber === 0) return { toolChoice: 'required' }
+          return {}
         },
         onError: (err) => {
           console.log('[v0] diagnose streamText error:', err)
