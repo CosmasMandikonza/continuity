@@ -14,14 +14,14 @@ export function FooterStrip({ busy }: FooterStripProps) {
         {busy ? 'piloting board' : 'idle'}
       </span>
       <span className="flex items-center gap-[7px] border-r border-rule px-[14px] py-2">
-        parser&nbsp;<b className="font-semibold text-ink-2s">OpenBoardView · brd v3</b>
+        device&nbsp;<b className="font-semibold text-ink-2s">MNT Reform r3</b>
       </span>
       <span className="hidden items-center gap-[7px] border-r border-rule px-[14px] py-2 sm:flex">
         graph&nbsp;<b className="font-semibold text-ink-2s">electrical_graph</b>
       </span>
       <div className="ml-auto flex">
         <span className="hidden items-center gap-[7px] border-r border-rule px-[14px] py-2 sm:flex">
-          simulator&nbsp;<b className="font-semibold text-[#1f7a52]">0.94 F1</b>
+          verifier&nbsp;<b className="font-semibold text-[#1f7a52]">deterministic</b>
         </span>
         <span className="hidden items-center gap-[7px] border-r border-rule px-[14px] py-2 md:flex">
           store&nbsp;<b className="font-semibold text-ink-2s">Aurora · pgvector</b>

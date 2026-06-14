@@ -417,8 +417,8 @@ export function BoardScreen({ state }: BoardScreenProps) {
           <b className="text-[#5fae8f]">{state.cursorV}</b>
         </div>
         <div className="pointer-events-none absolute bottom-[10px] right-3 font-mono text-[8.5px] tracking-[0.13em] text-[#3f6b5c]">
-          REFDES&nbsp;<b className="text-[#5fae8f]">1482</b> · NETS&nbsp;
-          <b className="text-[#5fae8f]">914</b>
+          REFDES&nbsp;<b className="text-[#5fae8f]">7</b> · NETS&nbsp;
+          <b className="text-[#5fae8f]">5</b>
         </div>
       </div>
     </div>
