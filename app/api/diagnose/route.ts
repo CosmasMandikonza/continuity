@@ -37,7 +37,7 @@ const DEVICE_NAME = 'MNT Reform'
 const SYSTEM_PROMPT = `You are Continuity, a meticulous board-level repair diagnostician working a live bench.
 
 Hard rules — you will be audited against the database:
-- Start by calling commonFailures for the fleet history of this symptom, then similarCases to pull semantically similar past cases (matched by meaning, so it works even when commonFailures finds no exact match). Then call traceNet on the leading suspect to confirm it sits on the failing rail — do this before you measure anything.
+- The fleet history and semantically similar past cases for this symptom are provided below (FLEET HISTORY and SIMILAR PAST CASES). Use them to pick the leading suspect, then call traceNet on it to confirm it sits on the failing rail — do this before you measure anything.
 - You only know this board through tools. Discover it via traceNet, inspectComponent, netMembers. NEVER name a refdes or net you have not seen in a tool result.
 - NEVER invent part numbers, values, or packages. Only state what inspectComponent returned.
 - Record EVERY measurement you reason from with recordMeasurement before you cite it as evidence.
@@ -45,7 +45,7 @@ Hard rules — you will be audited against the database:
 - A 'short' finding requires a recorded low-resistance measurement on that part/net. A rail collapse requires a measured voltage well below the net's nominal. Take those measurements first.
 - If a tool returns found:false, say so plainly ("no such part on this board"). Do not substitute a similar refdes.
 - If the evidence is insufficient, return an INCONCLUSIVE result naming the single next measurement to take. NEVER fabricate a culprit to seem decisive.
-- CALL tools through the function interface — never write a tool name (commonFailures, similarCases, traceNet, recordMeasurement, proposeFinding) or its arguments in your visible text. Your messages are read by a human technician and must be plain English, never code or a function call.
+- CALL tools through the function interface — never write a tool name (traceNet, recordMeasurement, proposeFinding) or its arguments in your visible text. Your messages are read by a human technician and must be plain English, never code or a function call.
 
 Narrate as you work, using the tools for every action. Begin EACH message with exactly one phase tag and nothing before it — [TRACE], then [MEASURE], then [CAUSE], then [FIX] — and cover only ONE phase per message. Keep each message to one or two short sentences, and never repeat a phase. After proposeFinding, send a single [FIX] message: a numbered repair protocol of at most five concise steps. Put a tag ONLY at the very start of a message, never mid-sentence.`
 
@@ -128,72 +128,61 @@ export async function POST(req: Request) {
         text: string,
       ) => writer.write({ type: 'data-log', data: { kind, label, text } })
 
+      // ---- PRIOR HISTORY (run once, server-side, so it costs no model round-trips).
+      // failure_rate = exact-symptom fleet stats; similar_findings = pgvector semantic
+      // match (works for any phrasing). Both emit a transcript line and are handed to
+      // the model below as grounding, instead of being model-invoked tools (which were
+      // two extra Groq round-trips that pushed the run past the 60s function limit).
+      let priorBlock = ''
+      try {
+        const rows = await failureRate(deviceId, symptom)
+        rows.forEach((r) => citedRefdes.add(r.refdes))
+        const top = rows.slice(0, 4)
+        if (top.length) {
+          logLine(
+            'trace',
+            'FLEET',
+            `History for "${symptom}": ${top.map((r) => `${r.refdes} ${Math.round(r.pct)}%`).join(', ')}.`,
+          )
+          priorBlock += `\n\nFLEET HISTORY (confirmed root cause across all shops for the EXACT symptom "${symptom}"): ${rows
+            .slice(0, 5)
+            .map((r) => `${r.refdes} ${Math.round(r.pct)}% of ${r.rootCauses} repairs`)
+            .join(', ')}.`
+        } else {
+          logLine('trace', 'FLEET', `No prior repair matches the exact symptom "${symptom}".`)
+          priorBlock += `\n\nFLEET HISTORY: no past repair matches the exact wording "${symptom}".`
+        }
+      } catch {
+        logLine('trace', 'FLEET', 'Fleet history is unavailable for this run.')
+      }
+
+      try {
+        const matches = await findSimilarCases(symptom, deviceId)
+        matches.forEach((m) => m.refdes && citedRefdes.add(m.refdes))
+        if (matches.length) {
+          const top = matches[0]
+          const tally = new Map<string, number>()
+          matches.forEach((m) => {
+            if (m.refdes) tally.set(m.refdes, (tally.get(m.refdes) || 0) + 1)
+          })
+          const ranked = [...tally.entries()].sort((a, b) => b[1] - a[1])
+          const lead = ranked[0]
+          logLine(
+            'trace',
+            'CASES',
+            `Symptom embeds to ${top.similarity.toFixed(2)} cosine similarity with ${matches.length} confirmed case${matches.length === 1 ? '' : 's'} (pgvector)${lead ? `; ${lead[0]} is the leading root cause (${lead[1]}/${matches.length})` : ''}.`,
+          )
+          priorBlock += `\n\nSIMILAR PAST CASES (pgvector semantic match — works even when the wording differs): closest confirmed cases resolve to ${ranked
+            .map(([r, n]) => `${r} (${n})`)
+            .join(', ')}. Leading suspect ${lead ? lead[0] : top.refdes}.`
+        } else {
+          logLine('trace', 'CASES', 'No embedded cases to match against yet.')
+        }
+      } catch {
+        logLine('trace', 'CASES', 'Semantic case retrieval is unavailable for this run.')
+      }
+
       const tools = {
-        commonFailures: tool({
-          description:
-            'Fleet history for THIS symptom: the components most often confirmed as the root cause across all shops, with their share of past repairs. Call this FIRST to decide which parts to trace and measure.',
-          inputSchema: z.object({}),
-          execute: async () => {
-            const rows = await failureRate(deviceId, symptom)
-            rows.forEach((r) => citedRefdes.add(r.refdes))
-            const top = rows.slice(0, 4)
-            if (top.length) {
-              logLine(
-                'trace',
-                'FLEET',
-                `History for "${symptom}": ${top.map((r) => `${r.refdes} ${Math.round(r.pct)}%`).join(', ')}.`,
-              )
-            }
-            return {
-              symptom,
-              topCauses: rows.slice(0, 5).map((r) => ({
-                refdes: r.refdes,
-                kind: r.kind,
-                pctOfRepairs: r.pct,
-                confirmedRepairs: r.rootCauses,
-              })),
-            }
-          },
-        }),
-
-        similarCases: tool({
-          description:
-            'Semantically similar PAST cases for this symptom, retrieved by meaning using vector search (pgvector) — finds relevant confirmed history even when the technician describes the fault in unusual words, where an exact-text lookup would miss. Returns the closest cases across the fleet with a cosine similarity score.',
-          inputSchema: z.object({}),
-          execute: async () => {
-            try {
-              const matches = await findSimilarCases(symptom, deviceId)
-              matches.forEach((m) => m.refdes && citedRefdes.add(m.refdes))
-              if (matches.length) {
-                const top = matches[0]
-                const tally = new Map<string, number>()
-                matches.forEach((m) => {
-                  if (m.refdes) tally.set(m.refdes, (tally.get(m.refdes) || 0) + 1)
-                })
-                const lead = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]
-                logLine(
-                  'trace',
-                  'CASES',
-                  `Symptom embeds to ${top.similarity.toFixed(2)} cosine similarity with ${matches.length} confirmed case${matches.length === 1 ? '' : 's'} (pgvector)${lead ? `; ${lead[0]} is the leading root cause (${lead[1]}/${matches.length})` : ''}.`,
-                )
-              } else {
-                logLine('trace', 'CASES', 'No embedded cases to match against yet.')
-              }
-              return {
-                symptom,
-                matches: matches.map((m) => ({
-                  refdes: m.refdes,
-                  net: m.net,
-                  similarity: m.similarity,
-                })),
-              }
-            } catch (err) {
-              logLine('trace', 'CASES', 'Semantic case retrieval is unavailable for this run.')
-              return { symptom, matches: [], error: (err as Error).message }
-            }
-          },
-        }),
-
         traceNet: tool({
           description:
             'Walk the electrical graph outward from a reference designator. Returns electrically connected components with hop distance, excluding ground/high-fanout power rails. Use this to find what a failing net touches.',
@@ -337,7 +326,7 @@ export async function POST(req: Request) {
       // ---- run the tool loop ---------------------------------------------
       const result = streamText({
         model: diagnosticModel(),
-        system: SYSTEM_PROMPT,
+        system: SYSTEM_PROMPT + priorBlock,
         providerOptions: modelProviderOptions(),
         messages: [
           {
@@ -346,10 +335,10 @@ export async function POST(req: Request) {
           },
         ],
         tools,
-        stopWhen: stepCountIs(10),
+        stopWhen: stepCountIs(8),
         prepareStep: ({ stepNumber }) => {
           // Force a tool call ONLY on the opening step, so the model starts by
-          // investigating (it calls commonFailures) instead of answering from
+          // investigating (it calls traceNet) instead of answering from
           // priors. After that, 'auto'.
           //
           // Why we don't constrain later steps: gpt-oss on Groq rejects
