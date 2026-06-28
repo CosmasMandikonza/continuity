@@ -11,6 +11,7 @@ interface ChassisProps {
   busy?: boolean
   meterUsage?: { used: number; quota: number } | null
   authEnabled?: boolean
+  modelLabel?: string
 }
 
 // The instrument frame, shared by every view. The faceplate + footer carry live
@@ -23,6 +24,7 @@ export function Chassis({
   busy = false,
   meterUsage = null,
   authEnabled = false,
+  modelLabel = 'AGENT',
 }: ChassisProps) {
   return (
     <main className="fixed inset-[18px] grid grid-rows-[auto_1fr_auto] overflow-hidden rounded-[14px] border border-rule-2 bg-[linear-gradient(180deg,#f1ecdf,#e7e1d3)] shadow-[0_1px_0_#fff8ec_inset,0_-22px_50px_-30px_#00000040_inset,0_40px_90px_-40px_#00000070,0_2px_0_#fffaf0]">
@@ -31,7 +33,7 @@ export function Chassis({
       <Rivet className="bottom-[11px] left-[11px]" />
       <Rivet className="bottom-[11px] right-[11px]" />
 
-      <Faceplate faultLed={faultLed} meterUsage={meterUsage} authEnabled={authEnabled} />
+      <Faceplate faultLed={faultLed} meterUsage={meterUsage} authEnabled={authEnabled} modelLabel={modelLabel} />
 
       <div className="grid min-h-0 grid-cols-[58px_minmax(0,1fr)]">
         <NavRail />

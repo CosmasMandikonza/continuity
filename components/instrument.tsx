@@ -13,12 +13,13 @@ import { MeasureGauge } from './measure-gauge'
 interface InstrumentProps {
   initialUsage?: { used: number; quota: number } | null
   authEnabled?: boolean
+  modelLabel?: string
 }
 
 // The Workbench view. The chassis frame, faceplate, nav rail, and footer now
 // live in <Chassis>; this component owns only the deck + the live diagnostic
 // state it passes up to the shared chrome.
-export function Instrument({ initialUsage = null, authEnabled = false }: InstrumentProps) {
+export function Instrument({ initialUsage = null, authEnabled = false, modelLabel = 'AGENT' }: InstrumentProps) {
   const { state, replay, runLive } = useDiagnosticSequence()
 
   // hovering a citation chip can transiently light its component on the screen.
@@ -36,6 +37,7 @@ export function Instrument({ initialUsage = null, authEnabled = false }: Instrum
       busy={state.busy}
       meterUsage={state.meterUsage ?? initialUsage}
       authEnabled={authEnabled}
+      modelLabel={modelLabel}
     >
       {/* deck (bento) */}
       <div className="grid min-h-0 gap-[14px] p-[14px] md:grid-cols-[160px_1fr_330px] lg:grid-cols-[172px_1fr_372px]">

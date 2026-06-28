@@ -16,6 +16,7 @@
 
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock'
 import { createGroq } from '@ai-sdk/groq'
+import { createAnthropic } from '@ai-sdk/anthropic'
 
 // --- model ids per transport ------------------------------------------------
 // Bedrock cross-region inference profile for Claude Opus.
@@ -24,6 +25,9 @@ const BEDROCK_MODEL = 'us.anthropic.claude-opus-4-1-20250805-v1:0'
 const GATEWAY_MODEL = 'anthropic/claude-opus-4.8'
 // Groq free tier, tool-calling capable. 30 RPM / 12K TPM / 100K TPD.
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
+// Anthropic direct (Claude). Vision-capable + strong multi-step tool use; this is
+// the transport that powers the camera and makes the chain reliable.
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6'
 
 // --- which credentials are present ------------------------------------------
 const HAS_BEDROCK = Boolean(
@@ -31,20 +35,24 @@ const HAS_BEDROCK = Boolean(
 )
 const HAS_GATEWAY = Boolean(process.env.AI_GATEWAY_API_KEY)
 const HAS_GROQ = Boolean(process.env.GROQ_API_KEY)
+const HAS_ANTHROPIC = Boolean(process.env.ANTHROPIC_API_KEY)
 
-export type ModelTransport = 'bedrock' | 'gateway' | 'groq' | 'none'
+export type ModelTransport = 'bedrock' | 'anthropic' | 'gateway' | 'groq' | 'none'
 
 // First transport with credentials wins.
 export const MODEL_TRANSPORT: ModelTransport = HAS_BEDROCK
   ? 'bedrock'
-  : HAS_GATEWAY
-    ? 'gateway'
-    : HAS_GROQ
-      ? 'groq'
-      : 'none'
+  : HAS_ANTHROPIC
+    ? 'anthropic'
+    : HAS_GATEWAY
+      ? 'gateway'
+      : HAS_GROQ
+        ? 'groq'
+        : 'none'
 
 const DEFAULT_MODEL: Record<ModelTransport, string> = {
   bedrock: BEDROCK_MODEL,
+  anthropic: ANTHROPIC_MODEL,
   gateway: GATEWAY_MODEL,
   groq: GROQ_MODEL,
   none: GATEWAY_MODEL,
@@ -53,6 +61,14 @@ const DEFAULT_MODEL: Record<ModelTransport, string> = {
 // Resolve the model id, honoring a dev override per transport.
 export const CONTINUITY_MODEL =
   process.env.CONTINUITY_MODEL || DEFAULT_MODEL[MODEL_TRANSPORT]
+
+// On the Anthropic transport, ignore a leftover non-Claude CONTINUITY_MODEL
+// (e.g. a Groq id from the earlier setup) so switching providers can never send
+// an invalid model string to Anthropic.
+const RESOLVED_MODEL =
+  MODEL_TRANSPORT === 'anthropic' && !CONTINUITY_MODEL.toLowerCase().includes('claude')
+    ? ANTHROPIC_MODEL
+    : CONTINUITY_MODEL
 
 // The route falls back to the scripted replay whenever this is false.
 export const HAS_MODEL_CREDS = MODEL_TRANSPORT !== 'none'
@@ -66,12 +82,17 @@ const groq = HAS_GROQ
   ? createGroq({ apiKey: process.env.GROQ_API_KEY })
   : null
 
+const anthropic = HAS_ANTHROPIC
+  ? createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null
+
 // Returns a provider model object (bedrock / groq) or a gateway model-id
 // string; all three are accepted by streamText's `model` parameter.
 export function diagnosticModel() {
-  if (MODEL_TRANSPORT === 'bedrock' && bedrock) return bedrock(CONTINUITY_MODEL)
-  if (MODEL_TRANSPORT === 'groq' && groq) return groq(CONTINUITY_MODEL)
-  return CONTINUITY_MODEL
+  if (MODEL_TRANSPORT === 'bedrock' && bedrock) return bedrock(RESOLVED_MODEL)
+  if (MODEL_TRANSPORT === 'anthropic' && anthropic) return anthropic(RESOLVED_MODEL)
+  if (MODEL_TRANSPORT === 'groq' && groq) return groq(RESOLVED_MODEL)
+  return RESOLVED_MODEL
 }
 
 // Only Bedrock + Opus supports the adaptive reasoning option. Every other
@@ -110,6 +131,7 @@ function prettyModelName(id: string): string {
 
 const TRANSPORT_TAG: Record<ModelTransport, string> = {
   bedrock: 'BEDROCK',
+  anthropic: 'ANTHROPIC',
   gateway: 'GATEWAY',
   groq: 'GROQ',
   none: 'REPLAY',
@@ -119,4 +141,4 @@ const TRANSPORT_TAG: Record<ModelTransport, string> = {
 export const MODEL_LABEL: string =
   MODEL_TRANSPORT === 'none'
     ? 'SCRIPTED · REPLAY'
-    : prettyModelName(CONTINUITY_MODEL) + ' · ' + TRANSPORT_TAG[MODEL_TRANSPORT]
+    : prettyModelName(RESOLVED_MODEL) + ' · ' + TRANSPORT_TAG[MODEL_TRANSPORT]

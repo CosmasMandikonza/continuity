@@ -6,9 +6,10 @@ interface FaceplateProps {
   faultLed: boolean
   meterUsage?: { used: number; quota: number } | null
   authEnabled?: boolean
+  modelLabel?: string
 }
 
-export function Faceplate({ faultLed, meterUsage, authEnabled = false }: FaceplateProps) {
+export function Faceplate({ faultLed, meterUsage, authEnabled = false, modelLabel = 'AGENT' }: FaceplateProps) {
   const used = meterUsage?.used ?? 142
   const quota = meterUsage?.quota ?? 500
   return (
@@ -64,9 +65,9 @@ export function Faceplate({ faultLed, meterUsage, authEnabled = false }: Facepla
       </div>
 
       {/* model tier */}
-      <div className="flex items-center gap-2 rounded-full border border-rule-2 bg-[#fff7e9] px-[11px] py-[5px] font-mono text-[10px] text-ink-2s">
+      <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-rule-2 bg-[#fff7e9] px-[11px] py-[5px] font-mono text-[10px] text-ink-2s">
         <span className="h-[6px] w-[6px] rounded-full bg-flux shadow-[0_0_7px_var(--flux)]" />
-        OPUS&nbsp;4.8&nbsp;·&nbsp;DEEP
+        {modelLabel}
       </div>
       <div className="font-mono text-[10px] text-ink-3">
         DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">{used}</b>/{quota}
