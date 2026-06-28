@@ -812,14 +812,14 @@ export interface SimilarCaseRow {
 export async function similarCases(
   symptom: string,
   deviceId: string,
+  tenantId: string,
   k = 8,
 ): Promise<SimilarCaseRow[]> {
   const emb = await embedText(symptom, 'search_query')
-  const { rows } = await query('SELECT * FROM similar_findings($1::vector, $2::uuid, $3::int)', [
-    toVectorLiteral(emb),
-    deviceId,
-    k,
-  ])
+  const { rows } = await query(
+    'SELECT * FROM shop_similar_findings($1::vector, $2::uuid, $3::uuid, $4::int)',
+    [toVectorLiteral(emb), deviceId, tenantId, k],
+  )
   return rows.map((r) => ({
     refdes: (r.refdes as string | null) ?? null,
     net: (r.net as string | null) ?? null,

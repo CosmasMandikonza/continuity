@@ -19,8 +19,10 @@ import {
   type RepairDetail,
   type FleetBreakdown,
 } from '@/lib/queries'
-import { withTenant } from '@/lib/db'
+import { withTenant, query } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { embedText, toVectorLiteral } from '@/lib/embed'
+import { revalidatePath } from 'next/cache'
 
 const DEVICE_NAME = 'MNT Reform'
 
@@ -140,4 +142,58 @@ export async function getFleetBreakdown(
   symptom = 'no power',
 ): Promise<FleetBreakdown | null> {
   return fleetBreakdown(deviceName, symptom)
+}
+
+// confirmRootCauseAction(findingId) -> promote a verified finding into the shop's
+// permanent knowledge base: flip it to 'confirmed' (scoped to the shop, so only
+// the owning shop can promote its own finding) AND embed it via Cohere, so
+// pgvector can recall it on future similar boards. This is how a shop's verified
+// repairs compound into searchable memory. Runs on any model -- embeddings are
+// independent of the diagnostic LLM.
+export async function confirmRootCauseAction(
+  findingId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const tenantId = await getTenantId()
+
+  // 1) Confirm + build the embedding doc, scoped to this shop (isolation).
+  const result = await withTenant(tenantId, async (client) => {
+    const upd = await client.query(
+      `UPDATE findings SET status = 'confirmed'
+       WHERE id = $1
+         AND repair_id IN (SELECT id FROM repairs WHERE tenant_id = $2)
+       RETURNING id`,
+      [findingId, tenantId],
+    )
+    if (upd.rows.length === 0) return null
+    const docRes = await client.query<{ doc: string }>(
+      `SELECT 'Symptom: ' || coalesce(r.symptom, 'unknown')
+              || '. Confirmed root cause on this board: ' || coalesce(c.refdes, 'unknown')
+              || coalesce(', rail ' || n.name, '') AS doc
+       FROM findings f
+       JOIN repairs r ON r.id = f.repair_id
+       LEFT JOIN components c ON c.id = f.component_id
+       LEFT JOIN nets n ON n.id = f.net_id
+       WHERE f.id = $1`,
+      [findingId],
+    )
+    return { doc: docRes.rows[0]?.doc ?? null }
+  })
+
+  if (!result) return { ok: false, error: 'Finding not found in your shop.' }
+  if (!result.doc) return { ok: false, error: 'Could not build case text.' }
+
+  // 2) Embed (Cohere) + store via the SECURITY DEFINER writer. Network call, so
+  //    it runs outside the transaction.
+  try {
+    const vec = await embedText(result.doc, 'search_document')
+    await query('SELECT set_finding_embedding($1::uuid, $2::vector)', [
+      findingId,
+      toVectorLiteral(vec),
+    ])
+  } catch (err) {
+    return { ok: false, error: `Confirmed, but embedding failed: ${(err as Error).message}` }
+  }
+
+  revalidatePath('/repairs')
+  return { ok: true }
 }

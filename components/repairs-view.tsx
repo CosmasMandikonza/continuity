@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getRepairDetailAction } from '@/app/actions'
+import { getRepairDetailAction, confirmRootCauseAction } from '@/app/actions'
 import type { RepairListItem, RepairDetail } from '@/lib/queries'
 
 function timeAgo(iso: string): string {
@@ -158,6 +158,7 @@ function RepairDetailPanel({ detail }: { detail: RepairDetail }) {
                 </span>
               )}
             </div>
+            <ConfirmRootCause key={finding.id} finding={finding} />
           </div>
         )}
 
@@ -278,5 +279,50 @@ function VerifyTag({ verified, small }: { verified: boolean | null; small?: bool
     >
       not checked
     </span>
+  )
+}
+
+function ConfirmRootCause({ finding }: { finding: RepairFinding }) {
+  const [state, setState] = useState<'idle' | 'saving' | 'done' | 'error'>(
+    finding.status === 'confirmed' ? 'done' : 'idle',
+  )
+  const [err, setErr] = useState<string | null>(null)
+
+  // Only a verified, not-yet-confirmed finding can be promoted into shop memory.
+  if (state !== 'done' && finding.verified !== true) return null
+
+  if (state === 'done') {
+    return (
+      <div className="mt-[11px] flex items-center gap-2 rounded-[7px] border border-[#1f7a52]/25 bg-[#1f7a52]/12 px-[10px] py-[7px]">
+        <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-[#1f7a52]">
+          ✓ confirmed · in shop memory
+        </span>
+        <span className="ml-auto font-mono text-[8.5px] text-ink-3">pgvector · embedded</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-[11px]">
+      <button
+        type="button"
+        disabled={state === 'saving'}
+        onClick={async () => {
+          setState('saving')
+          setErr(null)
+          const res = await confirmRootCauseAction(finding.id)
+          if (res.ok) setState('done')
+          else {
+            setState('error')
+            setErr(res.error ?? 'Failed to confirm.')
+          }
+        }}
+        className="flex items-center gap-[7px] rounded-[7px] border border-flux/40 bg-flux/10 px-[11px] py-[7px] font-mono text-[10px] text-flux-ink transition-colors hover:bg-flux/20 disabled:opacity-60"
+      >
+        <span className="text-[12px] leading-none">+</span>
+        {state === 'saving' ? 'EMBEDDING INTO SHOP MEMORY…' : 'Confirm root cause → shop memory'}
+      </button>
+      {state === 'error' && <div className="mt-[5px] font-mono text-[9px] text-probe">{err}</div>}
+    </div>
   )
 }

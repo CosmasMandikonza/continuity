@@ -173,7 +173,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        const matches = await findSimilarCases(symptom, deviceId)
+        const matches = await findSimilarCases(symptom, deviceId, tenantId)
         matches.forEach((m) => m.refdes && citedRefdes.add(m.refdes))
         if (matches.length) {
           const top = matches[0]
