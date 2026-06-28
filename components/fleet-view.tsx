@@ -105,15 +105,15 @@ export function FleetView({
             aggregate reads every shop&rsquo;s confirmed repairs and returns only these percentages.
           </p>
           <p className="mt-[9px] font-sans text-[11.5px] leading-[1.55] text-ink-2s">
-            No shop ever sees another shop&rsquo;s parts, customers, or boards. Row-level security
-            keeps the records isolated; the <i>aggregate</i> crosses the boundary — the rows never
-            do.
+            No shop ever sees another shop&rsquo;s parts, customers, or boards: every read is
+            scoped to one shop, with row-level security policies as a second guardrail. Only this{' '}
+            <i>aggregate</i> crosses that boundary — and only as counts. The rows never do.
           </p>
           <div className="mt-[12px] flex flex-wrap gap-[6px] font-mono text-[8.5px] uppercase tracking-[0.08em] text-ink-3">
             <Tag>aggregate</Tag>
             <Tag>anonymized</Tag>
             <Tag>no row leak</Tag>
-            <Tag>rls-isolated</Tag>
+            <Tag>tenant-scoped</Tag>
           </div>
         </div>
       </aside>

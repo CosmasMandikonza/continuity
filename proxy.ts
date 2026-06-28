@@ -5,10 +5,23 @@ import { isClerkEnabled } from '@/lib/clerk-config'
 // Next.js 16 renamed `middleware` to `proxy` (same mechanism, new filename).
 // Delete the old middleware.ts — only this file should remain.
 //
-// Public routes that never require a session. The marketing landing at "/" is
-// public so signed-out visitors (and judges following the deploy link) see it;
-// everything else still requires a session when Clerk is configured.
-const isPublicRoute = createRouteMatcher(['/', '/sign-in(.*)', '/sign-up(.*)'])
+// Public routes. The marketing landing + pricing are public, and so is the app
+// itself in GUEST/DEMO mode: signed-out visitors (and judges following the deploy
+// link) can explore the full product against a shared demo shop (the DEV tenant,
+// resolved in getTenantContext). Creating a shop gives them their own isolated,
+// private workspace. Only the privileged migration/backfill API routes still
+// require a session.
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/pricing(.*)',
+  '/bench(.*)',
+  '/repairs(.*)',
+  '/graph(.*)',
+  '/fleet(.*)',
+  '/api/diagnose(.*)',
+])
 
 // When Clerk is configured, protect everything except the sign-in/up pages and
 // land signed-out users on /sign-in. When it is NOT configured (dev / no keys),

@@ -2,6 +2,8 @@
 
 import { AuthButton } from './auth-button'
 import { OrgSwitcher } from './org-switcher'
+import Link from 'next/link'
+import { SignedIn, SignedOut } from '@clerk/nextjs'
 
 interface FaceplateProps {
   faultLed: boolean
@@ -70,11 +72,39 @@ export function Faceplate({ faultLed, meterUsage, authEnabled = false, modelLabe
         <span className="h-[6px] w-[6px] rounded-full bg-flux shadow-[0_0_7px_var(--flux)]" />
         {modelLabel}
       </div>
-      <div className="font-mono text-[10px] text-ink-3">
-        DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">{used}</b>/{quota}
-      </div>
-      {authEnabled && <OrgSwitcher enabled={authEnabled} />}
-      {authEnabled && <AuthButton enabled={authEnabled} />}
+      <Link
+        href="/pricing"
+        title="Plans & usage"
+        className="font-mono text-[10px] text-ink-3 transition-colors hover:text-ink-2s"
+      >
+        {used >= quota ? (
+          <span className="text-probe">QUOTA&nbsp;REACHED&nbsp;·&nbsp;UPGRADE&nbsp;→</span>
+        ) : (
+          <>
+            DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">{used}</b>/{quota}
+          </>
+        )}
+      </Link>
+      {authEnabled && (
+        <>
+          <SignedIn>
+            <OrgSwitcher enabled />
+            <AuthButton enabled />
+          </SignedIn>
+          <SignedOut>
+            <span className="hidden items-center gap-[6px] rounded-full border border-rule-2 bg-[#fff7e9] px-[10px] py-[5px] font-mono text-[9px] uppercase tracking-[0.1em] text-ink-3 sm:flex">
+              <span className="h-[6px] w-[6px] rounded-full bg-caution shadow-[0_0_7px_#ffc24d]" />
+              Demo shop
+            </span>
+            <Link
+              href="/sign-up"
+              className="whitespace-nowrap rounded-full border border-flux bg-flux px-[13px] py-[6px] font-mono text-[10px] font-semibold text-[#fff7e9] shadow-[0_8px_20px_-10px_var(--flux)] transition-transform hover:-translate-y-[1px]"
+            >
+              Create your shop&nbsp;→
+            </Link>
+          </SignedOut>
+        </>
+      )}
     </header>
   )
 }

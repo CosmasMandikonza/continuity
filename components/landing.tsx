@@ -358,8 +358,11 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
             </div>
             <div className="mt-[3px] font-mono text-[8px] tracking-[0.18em] text-ink-3">BENCH&nbsp;DIAGNOSTIC&nbsp;INSTRUMENT</div>
           </div>
-          <Link href="/bench" className="ml-auto rounded-full border border-flux bg-flux px-[16px] py-[8px] font-mono text-[11px] font-semibold text-[#fff7e9] shadow-[0_8px_20px_-10px_var(--flux)] transition-transform hover:-translate-y-[1px]">
-            Open the bench&nbsp;→
+          <Link href="/pricing" className="ml-auto font-mono text-[11px] text-ink-2s transition-colors hover:text-ink">
+            Pricing
+          </Link>
+          <Link href="/sign-up" className="rounded-full border border-flux bg-flux px-[16px] py-[8px] font-mono text-[11px] font-semibold text-[#fff7e9] shadow-[0_8px_20px_-10px_var(--flux)] transition-transform hover:-translate-y-[1px]">
+            Create your shop&nbsp;→
           </Link>
         </header>
 
@@ -380,17 +383,17 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
               It can&rsquo;t invent a part: every refdes resolves to a row, or it says &ldquo;no such part.&rdquo;
             </div>
             <div className="mt-[24px] flex flex-wrap items-center gap-3">
-              <Link href="/bench" className="rounded-full border border-flux bg-flux px-[20px] py-[11px] font-mono text-[12px] font-semibold text-[#fff7e9] shadow-[0_10px_26px_-12px_var(--flux)] transition-transform hover:-translate-y-[1px]">
-                Open the bench&nbsp;→
+              <Link href="/sign-up" className="rounded-full border border-flux bg-flux px-[20px] py-[11px] font-mono text-[12px] font-semibold text-[#fff7e9] shadow-[0_10px_26px_-12px_var(--flux)] transition-transform hover:-translate-y-[1px]">
+                Create your shop&nbsp;→
               </Link>
-              <Link href="/graph" className="rounded-full border border-rule-2 bg-[#fff7e9] px-[20px] py-[11px] font-mono text-[12px] text-ink-2s transition-colors hover:border-rule-strong">
-                See the live graph
+              <Link href="/bench" className="rounded-full border border-rule-2 bg-[#fff7e9] px-[20px] py-[11px] font-mono text-[12px] text-ink-2s transition-colors hover:border-rule-strong">
+                Explore the live demo&nbsp;→
               </Link>
             </div>
             <div className="mt-[22px] flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] tracking-[0.02em] text-ink-3">
               <span>Aurora PostgreSQL + pgvector</span>
               <span className="text-rule-strong">·</span>
-              <span>row-level multi-tenant</span>
+              <span>tenant-scoped multi-shop</span>
               <span className="text-rule-strong">·</span>
               <span>right-to-repair ready</span>
             </div>
@@ -513,14 +516,14 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
               Stop scrapping boards you could fix.
             </h2>
             <p className="mx-auto mt-[14px] max-w-[30rem] font-sans text-[14px] leading-[1.55] text-ink-2s">
-              Open the bench and run a diagnosis — grounded in the graph, verified by the database, and entirely yours.
+              Create your shop and run a diagnosis — grounded in the graph, verified by the database, and entirely yours.
             </p>
             <div className="mt-[24px] flex flex-wrap justify-center gap-3">
-              <Link href="/bench" className="rounded-full border border-flux bg-flux px-[24px] py-[12px] font-mono text-[12px] font-semibold text-[#fff7e9] shadow-[0_12px_28px_-12px_var(--flux)] transition-transform hover:-translate-y-[1px]">
-                Open the bench&nbsp;→
+              <Link href="/sign-up" className="rounded-full border border-flux bg-flux px-[24px] py-[12px] font-mono text-[12px] font-semibold text-[#fff7e9] shadow-[0_12px_28px_-12px_var(--flux)] transition-transform hover:-translate-y-[1px]">
+                Create your shop&nbsp;→
               </Link>
-              <Link href="/graph" className="rounded-full border border-rule-2 bg-[#fff7e9] px-[24px] py-[12px] font-mono text-[12px] text-ink-2s transition-colors hover:border-rule-strong">
-                See the live graph
+              <Link href="/bench" className="rounded-full border border-rule-2 bg-[#fff7e9] px-[24px] py-[12px] font-mono text-[12px] text-ink-2s transition-colors hover:border-rule-strong">
+                Explore the live demo&nbsp;→
               </Link>
             </div>
           </div>
@@ -531,7 +534,7 @@ export function Landing({ topCause }: { topCause: FleetSummary | null }) {
           <div className="flex flex-wrap items-center justify-center gap-2 font-mono text-[10px] tracking-[0.06em] text-ink-3">
             <span>Aurora PostgreSQL + pgvector</span>
             <span className="text-rule-strong">·</span>
-            <span>row-level multi-tenant</span>
+            <span>tenant-scoped multi-shop</span>
             <span className="text-rule-strong">·</span>
             <span>Next.js on Vercel</span>
           </div>
