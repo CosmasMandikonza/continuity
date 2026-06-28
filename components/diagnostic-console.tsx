@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { PenLine, Camera, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { PenLine, Camera, ArrowRight, RotateCcw, ShieldCheck, ShieldAlert, X } from 'lucide-react'
 import type { ROWS, Step } from '@/lib/continuity-data'
 import type { VerificationView } from './use-diagnostic-sequence'
 import { ChipRow } from './chip-row'
@@ -14,7 +14,7 @@ interface DiagnosticConsoleProps {
   notice: { kind: 'quota' | 'throttle' | 'error'; text: string } | null
   verification: VerificationView | null
   onReplay: () => void
-  onSubmit: (symptom: string) => void
+  onSubmit: (symptom: string, image?: string) => void
   onOpen: (key: keyof typeof ROWS, rect: DOMRect) => void
   onClose: () => void
 }
@@ -39,7 +39,39 @@ export function DiagnosticConsole({
   onClose,
 }: DiagnosticConsoleProps) {
   const logRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState('')
+  const [image, setImage] = useState<string | null>(null)
+
+  // Read a board photo, downscale it (so a phone shot stays well under Vercel's
+  // request limit), and keep it as a data URL until the next diagnose call.
+  const onPickImage = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const src = typeof reader.result === 'string' ? reader.result : ''
+      if (!src) return
+      const img = new Image()
+      img.onload = () => {
+        const max = 1024
+        const scale = Math.min(1, max / Math.max(img.width, img.height))
+        const w = Math.round(img.width * scale)
+        const h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return setImage(src)
+        ctx.drawImage(img, 0, 0, w, h)
+        setImage(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = () => setImage(src)
+      img.src = src
+    }
+    reader.readAsDataURL(file)
+  }
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -47,9 +79,10 @@ export function DiagnosticConsole({
 
   const submit = () => {
     const symptom = draft.trim()
-    if (!symptom || busy) return
-    onSubmit(symptom)
+    if ((!symptom && !image) || busy) return
+    onSubmit(symptom || 'Diagnose from the attached board photo.', image ?? undefined)
     setDraft('')
+    setImage(null)
   }
 
   return (
@@ -153,15 +186,43 @@ export function DiagnosticConsole({
             {notice.text}
           </div>
         )}
+        {image && (
+          <div className="mb-[9px] flex items-center gap-[9px] rounded-[8px] border border-rule-2 bg-[#fff7e9] px-[9px] py-[7px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image} alt="attached board" className="h-9 w-9 rounded-[5px] border border-rule object-cover" />
+            <span className="font-mono text-[10px] text-ink-2s">board photo attached</span>
+            <button
+              type="button"
+              onClick={() => setImage(null)}
+              className="ml-auto text-ink-3 transition-colors hover:text-flux"
+              aria-label="Remove photo"
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-[9px] rounded-[9px] border border-rule-2 bg-[#fff7e9] px-[11px] py-[9px] focus-within:border-flux focus-within:shadow-[0_0_0_3px_#e2540a22]">
           <button
             type="button"
-            className="text-ink-3 transition-colors hover:text-flux"
-            title="Capture from microscope"
-            aria-label="Capture frame"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className={`transition-colors disabled:opacity-40 ${
+              image ? 'text-flux' : 'text-ink-3 hover:text-flux'
+            }`}
+            title="Attach a photo of the board"
+            aria-label="Attach board photo"
           >
             <Camera size={17} strokeWidth={1.6} />
           </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={onPickImage}
+            className="hidden"
+            aria-hidden
+          />
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -179,7 +240,7 @@ export function DiagnosticConsole({
           <button
             type="button"
             onClick={submit}
-            disabled={busy || !draft.trim()}
+            disabled={busy || (!draft.trim() && !image)}
             className="grid h-[30px] w-[30px] place-items-center rounded-[7px] bg-flux text-primary-foreground transition-colors hover:bg-flux-2 disabled:opacity-40"
             aria-label="Send"
           >

@@ -26,7 +26,7 @@ import {
   similarCases as findSimilarCases,
 } from '@/lib/queries'
 import { verifyFinding } from '@/lib/verify'
-import { diagnosticModel, modelProviderOptions, HAS_MODEL_CREDS } from '@/lib/model'
+import { diagnosticModel, modelProviderOptions, HAS_MODEL_CREDS, MODEL_TRANSPORT } from '@/lib/model'
 import { getTenantContext } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
@@ -39,6 +39,7 @@ const SYSTEM_PROMPT = `You are Continuity, a meticulous board-level repair diagn
 Hard rules — you will be audited against the database:
 - A FLEET HISTORY and SIMILAR PAST CASES block for this symptom is provided below. Treat it as a STARTING HYPOTHESIS to confirm on THIS board, not a conclusion. Call traceNet on the leading suspect, then recordMeasurement on the rail it feeds, then proposeFinding. You have NOT finished until you call proposeFinding — never stop after only tracing.
 - You only know this board through tools. Discover it via traceNet, inspectComponent, netMembers. NEVER name a refdes or net you have not seen in a tool result.
+- If a PHOTO of the board is attached, read it as a visual observation: note what you can see (the symptom, any visible damage, discoloration, or the affected region) at the start of your [TRACE] message. The photo tells you WHERE to look, but it is NEVER a substitute for grounding — every part you cite must still come from a tool result, every measurement must still be recorded, and the finding must still pass the database verifier.
 - NEVER invent part numbers, values, or packages. Only state what inspectComponent returned.
 - Record EVERY measurement you reason from with recordMeasurement before you cite it as evidence.
 - Propose EXACTLY ONE root-cause finding with proposeFinding, with a calibrated confidence (0-1). Then give a short numbered repair protocol.
@@ -52,12 +53,25 @@ Narrate as you work, using the tools for every action. Begin EACH message with e
 interface DiagBody {
   symptom?: string
   deviceName?: string
+  image?: string
 }
 
 export async function POST(req: Request) {
   const body = (await req.json()) as DiagBody
   const symptom = (body.symptom || '').trim()
   const deviceName = body.deviceName || DEVICE_NAME
+  // A board photo (data URL) is read only when the live model can see images.
+  // gpt-oss / Llama on Groq are text-only, so we drop the image there rather than
+  // send a part the provider rejects; the symptom-driven diagnosis still runs.
+  // On Claude (anthropic / bedrock / gateway) the photo becomes a vision input.
+  const visionCapable =
+    MODEL_TRANSPORT === 'anthropic' ||
+    MODEL_TRANSPORT === 'bedrock' ||
+    MODEL_TRANSPORT === 'gateway'
+  const boardImage =
+    visionCapable && typeof body.image === 'string' && body.image.startsWith('data:image')
+      ? body.image
+      : null
 
   // No model credentials -> tell the client to use the scripted fallback.
   if (!HAS_MODEL_CREDS) {
@@ -334,7 +348,15 @@ export async function POST(req: Request) {
         messages: [
           {
             role: 'user',
-            content: `Device under test: ${deviceName}. Symptom from the tech: "${symptom}". Diagnose it.`,
+            content: boardImage
+              ? [
+                  {
+                    type: 'text' as const,
+                    text: `Device under test: ${deviceName}. Symptom from the tech: "${symptom || '(see the attached photo)'}". A photo of the board is attached — read it first, describe what you see, then confirm the diagnosis on the board with the tools.`,
+                  },
+                  { type: 'image' as const, image: boardImage },
+                ]
+              : `Device under test: ${deviceName}. Symptom from the tech: "${symptom}". Diagnose it.`,
           },
         ],
         tools,

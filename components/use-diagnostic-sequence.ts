@@ -295,7 +295,7 @@ export function useDiagnosticSequence() {
   )
 
   const runLive = useCallback(
-    async (symptom: string) => {
+    async (symptom: string, image?: string) => {
       reset()
       knownNets.current = new Set()
       liveBuf.current = null
@@ -314,7 +314,7 @@ export function useDiagnosticSequence() {
         const res = await fetch('/api/diagnose', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ symptom }),
+          body: JSON.stringify({ symptom, image }),
           signal: controller.signal,
         })
 
