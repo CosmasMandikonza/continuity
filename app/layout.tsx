@@ -36,21 +36,28 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const tree = (
+  // Clerk's current Next 16 guidance: <ClerkProvider> sits INSIDE <body>, not
+  // wrapping <html>. We still only mount it when keys are present, so the
+  // no-auth scripted demo runs untouched with zero Clerk configuration.
+  const body = (
+    <>
+      {children}
+      {process.env.NODE_ENV === 'production' && <Analytics />}
+    </>
+  )
+
+  return (
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${hankenGrotesk.variable} ${ibmPlexMono.variable} bg-chassis`}
     >
       <body className="font-sans antialiased">
-        {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {isClerkEnabled() ? (
+          <ClerkProvider appearance={clerkAppearance}>{body}</ClerkProvider>
+        ) : (
+          body
+        )}
       </body>
     </html>
   )
-
-  // Only mount ClerkProvider when keys are present, so the no-auth scripted
-  // demo runs untouched with zero Clerk configuration.
-  if (!isClerkEnabled()) return tree
-
-  return <ClerkProvider appearance={clerkAppearance}>{tree}</ClerkProvider>
 }
