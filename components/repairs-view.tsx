@@ -90,6 +90,11 @@ export function RepairsView({ repairs }: { repairs: RepairListItem[] }) {
                         <span className="font-mono text-[9.5px] text-ink-3">no finding</span>
                       )}
                       {r.findingRefdes && <VerifyTag verified={r.findingVerified} small />}
+                      {r.techName && (
+                        <span className="ml-auto truncate font-mono text-[8.5px] text-ink-3">
+                          {r.techName}
+                        </span>
+                      )}
                     </div>
                   </button>
                 </li>

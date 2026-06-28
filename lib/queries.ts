@@ -602,6 +602,7 @@ export interface RepairListItem {
   findingKind: string | null
   findingVerified: boolean | null
   findingConfidence: number | null
+  techName: string | null
 }
 
 export async function listRepairs(
@@ -612,9 +613,11 @@ export async function listRepairs(
     `SELECT r.id, r.ref, r.symptom, r.status, r.created_at,
             d.name AS device_name,
             f.refdes AS finding_refdes, f.kind AS finding_kind,
-            f.verified AS finding_verified, f.confidence AS finding_confidence
+            f.verified AS finding_verified, f.confidence AS finding_confidence,
+            u.name AS tech_name
      FROM repairs r
      JOIN devices d ON d.id = r.device_id
+     LEFT JOIN users u ON u.id = r.user_id
      LEFT JOIN LATERAL (
        SELECT c.refdes, fi.kind, fi.verified, fi.confidence
        FROM findings fi
@@ -639,6 +642,7 @@ export async function listRepairs(
     findingKind: r.finding_kind as string | null,
     findingVerified: r.finding_verified as boolean | null,
     findingConfidence: r.finding_confidence != null ? Number(r.finding_confidence) : null,
+    techName: r.tech_name as string | null,
   }))
 }
 
@@ -694,12 +698,13 @@ function messageText(content: unknown): string {
 export async function getRepairDetail(
   client: PoolClient,
   repairId: string,
+  tenantId: string,
 ): Promise<RepairDetail | null> {
   const { rows: head } = await client.query(
     `SELECT r.id, r.ref, r.symptom, r.status, r.created_at, d.name AS device_name
      FROM repairs r JOIN devices d ON d.id = r.device_id
-     WHERE r.id = $1`,
-    [repairId],
+     WHERE r.id = $1 AND r.tenant_id = $2`,
+    [repairId, tenantId],
   )
   if (head.length === 0) return null
   const h = head[0]

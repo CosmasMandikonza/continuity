@@ -1,6 +1,7 @@
 'use client'
 
 import { AuthButton } from './auth-button'
+import { OrgSwitcher } from './org-switcher'
 
 interface FaceplateProps {
   faultLed: boolean
@@ -72,6 +73,7 @@ export function Faceplate({ faultLed, meterUsage, authEnabled = false, modelLabe
       <div className="font-mono text-[10px] text-ink-3">
         DIAGNOSTICS&nbsp;<b className="font-semibold text-ink-2s">{used}</b>/{quota}
       </div>
+      {authEnabled && <OrgSwitcher enabled={authEnabled} />}
       {authEnabled && <AuthButton enabled={authEnabled} />}
     </header>
   )

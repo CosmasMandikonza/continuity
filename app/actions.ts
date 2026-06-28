@@ -130,7 +130,7 @@ export async function listRepairsAction(): Promise<RepairListItem[]> {
 // shop can read it). Returns null for an id the current shop doesn't own.
 export async function getRepairDetailAction(repairId: string): Promise<RepairDetail | null> {
   const tenantId = await getTenantId()
-  return withTenant(tenantId, (client) => getRepairDetail(client, repairId))
+  return withTenant(tenantId, (client) => getRepairDetail(client, repairId, tenantId))
 }
 
 // getFleetBreakdown -> the full cross-shop root-cause distribution for the Fleet
